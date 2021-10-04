@@ -20,12 +20,25 @@ class point {
     }
 }
 
+class line {
+    constructor() {
+        this.text = [];
+        this.selection = new point(0, 0);
+        this.selection.start = new point(-1, -1);
+        this.selection.end = new point(-1, -1);
+    }
+
+    length() {
+        return this.text.length;
+    }
+}
+
 
 const letter_space = new point(0, 5);
 const default_position = new point(15, 25);
 
 
-var g_text_buffer = [[]]; /// TODO: Make custom row objects for each row of text
+var g_text_buffer = [new line()];
 var g_cursor_position = new point(0, 0);
 var g_cursor_visible = true;
 var g_cursor_interval;
@@ -36,14 +49,13 @@ var g_selection_end = new point(-1, -1);
 var g_canvas;
 var g_ctx;
 
-
 function clamp(val, min, max) {
     return Math.min(Math.max(val, min), max);
 }
 
 function set_cursor_position(x, y) {
     y = clamp(y, 0, g_text_buffer.length-1);
-    x = clamp(x, 0, g_text_buffer[y].length);
+    x = clamp(x, 0, g_text_buffer[y].length());
 
     g_cursor_position.x = x;
     g_cursor_position.y = y;
@@ -53,7 +65,7 @@ function set_cursor_position(x, y) {
 
 function increment_cursor_position(x, y) {
     y = clamp(y, -g_cursor_position.y, g_text_buffer.length-1 - g_cursor_position.y);
-    x = clamp(x, -g_cursor_position.x, g_text_buffer[g_cursor_position.y + y].length - g_cursor_position.x);
+    x = clamp(x, -g_cursor_position.x, g_text_buffer[g_cursor_position.y + y].length() - g_cursor_position.x);
 
     g_cursor_position.x += x;
     g_cursor_position.y += y;
@@ -85,7 +97,7 @@ function draw_cursor() {
 function select_row(row) {
     start.x = 0;
     start.y = row;
-    end.x = g_text_buffer[row].length;
+    end.x = g_text_buffer[row].length();
     end.y = row;
 }
 
@@ -139,20 +151,20 @@ function something_is_selected() {
 }
 
 function insert_letter_at_cursor(key) {
-    g_text_buffer[g_cursor_position.y].splice(g_cursor_position.x, 0, key);
+    g_text_buffer[g_cursor_position.y].text.splice(g_cursor_position.x, 0, key);
     increment_cursor_position(1, 0);
 }
 
 function delete_selected() {
     if (something_is_selected()) {
         var start_y = clamp(Math.min(g_selection_start.y, g_selection_end.y), 0, g_text_buffer.length);
-        var start_x = clamp(Math.min(g_selection_start.x, g_selection_end.x), 0, g_text_buffer[start_y].length);
+        var start_x = clamp(Math.min(g_selection_start.x, g_selection_end.x), 0, g_text_buffer[start_y].length());
         var end_y = clamp(Math.max(g_selection_start.y, g_selection_end.y), 0, g_text_buffer.length);
-        var end_x = clamp(Math.max(g_selection_start.x, g_selection_end.x), 0, g_text_buffer[end_y].length);
+        var end_x = clamp(Math.max(g_selection_start.x, g_selection_end.x), 0, g_text_buffer[end_y].length());
         console.log(start_x, start_y, end_x, end_y);
         for (var i = start_y; i <= end_y; i++) {
             for (var j = start_x; j < end_x; j++) {
-                g_text_buffer[i].splice(start_x, 1);
+                g_text_buffer[i].text.splice(start_x, 1);
             }
         }
     }
@@ -188,8 +200,8 @@ function reload_buffer() {
     // Write key presses to the canvas.
     g_ctx.clearRect(0, 0, window.innerWidth*2, window.innerHeight*2); // Clear the canvas
     for (var i = 0; i < g_text_buffer.length; i++) {
-        for (var j = 0; j < g_text_buffer[i].length; j++) {
-            write_key(g_text_buffer[i][j], false); // Simulate the key presses of the buffer without appending to the buffer
+        for (var j = 0; j < g_text_buffer[i].length(); j++) {
+            write_key(g_text_buffer[i].text[j], false); // Simulate the key presses of the buffer without appending to the buffer
         }
         g_cursor_position.y++;
         g_cursor_position.x = 0;
@@ -201,9 +213,9 @@ function reload_buffer() {
     // Highlight Selected Text
     if (something_is_selected()) {
         var start_y = clamp(Math.min(g_selection_start.y, g_selection_end.y), 0, g_text_buffer.length);
-        var start_x = clamp(Math.min(g_selection_start.x, g_selection_end.x), 0, g_text_buffer[start_y].length);
+        var start_x = clamp(Math.min(g_selection_start.x, g_selection_end.x), 0, g_text_buffer[start_y].length());
         var end_y = clamp(Math.max(g_selection_start.y, g_selection_end.y), 0, g_text_buffer.length);
-        var end_x = clamp(Math.max(g_selection_start.x, g_selection_end.x), 0, g_text_buffer[end_y].length);
+        var end_x = clamp(Math.max(g_selection_start.x, g_selection_end.x), 0, g_text_buffer[end_y].length());
         draw_selection(new point(start_x, start_y), new point(end_x, end_y));
     }
 }
@@ -239,7 +251,7 @@ function key_pressed(key, append_to_buffer) {
             case 'a':
                 g_selection_start.x = 0;
                 g_selection_start.y = 0;
-                g_selection_end.x = g_text_buffer[g_text_buffer.length-1].length-1; /// FIXME: We should find the max row width instead 
+                g_selection_end.x = g_text_buffer[g_text_buffer.length-1].length()-1; /// FIXME: We should find the max row width instead 
                 g_selection_end.y = g_text_buffer.length-1;
                 reload_buffer();
                 break;
@@ -266,7 +278,7 @@ function key_pressed(key, append_to_buffer) {
                 g_cursor_position.x++;
                 update_cursor();
             }
-            else if (g_cursor_position.x === g_text_buffer[g_cursor_position.y].length && g_text_buffer.length !== 1 && g_cursor_position.y !== g_text_buffer.length-1) {
+            else if (g_cursor_position.x === g_text_buffer[g_cursor_position.y].length() && g_text_buffer.length !== 1 && g_cursor_position.y !== g_text_buffer.length-1) {
                 g_cursor_position.x = 0; 
                 increment_cursor_position(0, 1);
             }
@@ -284,7 +296,7 @@ function key_pressed(key, append_to_buffer) {
                 update_cursor();
             }
             else if (g_cursor_position.x === 0 && g_cursor_position.y !== 0) {
-                g_cursor_position.x = g_text_buffer[g_cursor_position.y-1].length; 
+                g_cursor_position.x = g_text_buffer[g_cursor_position.y-1].length(); 
                 increment_cursor_position(0, -1);
             }
             else {
@@ -318,7 +330,7 @@ function key_pressed(key, append_to_buffer) {
                 update_cursor();
             }
             else if (g_cursor_position.y === g_text_buffer.length-1) {
-                g_cursor_position.x = g_text_buffer[g_cursor_position.y].length; 
+                g_cursor_position.x = g_text_buffer[g_cursor_position.y].length(); 
                 update_cursor();
             }
             else {
@@ -335,13 +347,13 @@ function write_key(key, append_to_buffer) {
     switch (key) {
         case "Enter":
             if (append_to_buffer) {
-                g_text_buffer.splice(g_cursor_position.y + 1, 0, []);
-                var next_line_length = g_text_buffer[g_cursor_position.y + 1].length
-                if (g_cursor_position.x !== g_text_buffer[g_cursor_position.y].length-1) {   // If the cursor is not at the end of the buffer move everything after 
+                g_text_buffer.splice(g_cursor_position.y + 1, 0, new line());
+                var next_line_length = g_text_buffer[g_cursor_position.y + 1].length();
+                if (g_cursor_position.x !== g_text_buffer[g_cursor_position.y].length()-1) {   // If the cursor is not at the end of the buffer move everything after 
                                                                         // the cursor to the new line.
-                    var after_newline = g_text_buffer[g_cursor_position.y].slice(g_cursor_position.x);
-                    g_text_buffer[g_cursor_position.y + 1].push.apply(g_text_buffer[g_cursor_position.y + 1], after_newline);
-                    g_text_buffer[g_cursor_position.y].splice(g_cursor_position.x, after_newline.length);
+                    var after_newline = g_text_buffer[g_cursor_position.y].text.slice(g_cursor_position.x);
+                    g_text_buffer[g_cursor_position.y + 1].text.push.apply(g_text_buffer[g_cursor_position.y + 1].text, after_newline);
+                    g_text_buffer[g_cursor_position.y].text.splice(g_cursor_position.x, after_newline.length);
                 }
                 set_cursor_position(next_line_length, g_cursor_position.y + 1);
             }
@@ -357,13 +369,13 @@ function write_key(key, append_to_buffer) {
             else {
                 if (g_cursor_position.x === 0 && g_cursor_position.y === 0) { return; } // Ignore a backspace at the beginning of the screen
                 if (g_cursor_position.x === 0) {
-                    previous_line_length = g_text_buffer[g_cursor_position.y - 1].length;
-                    g_text_buffer[g_cursor_position.y - 1].push.apply(g_text_buffer[g_cursor_position.y-1], g_text_buffer[g_cursor_position.y]);
+                    previous_line_length = g_text_buffer[g_cursor_position.y - 1].length();
+                    g_text_buffer[g_cursor_position.y - 1].text.push.apply(g_text_buffer[g_cursor_position.y-1].text, g_text_buffer[g_cursor_position.y].text);
                     g_text_buffer.splice(g_cursor_position.y, 1);
                     set_cursor_position(previous_line_length, g_cursor_position.y - 1);
                 }
                 else {
-                    g_text_buffer[g_cursor_position.y].splice(g_cursor_position.x-1, 1);
+                    g_text_buffer[g_cursor_position.y].text.splice(g_cursor_position.x-1, 1);
                     increment_cursor_position(-1, 0);
                 }
             }
@@ -374,14 +386,14 @@ function write_key(key, append_to_buffer) {
                 delete_selected();
             }
             else {                
-                if (g_cursor_position.x === g_text_buffer[g_cursor_position.y].length) {
-                    next_line_length = g_text_buffer[g_cursor_position.y + 1].length;
-                    g_text_buffer[g_cursor_position.y].push.apply(g_text_buffer[g_cursor_position.y], g_text_buffer[g_cursor_position.y + 1]);
+                if (g_cursor_position.x === g_text_buffer[g_cursor_position.y].length()) {
+                    next_line_length = g_text_buffer[g_cursor_position.y + 1].length();
+                    g_text_buffer[g_cursor_position.y].text.push.apply(g_text_buffer[g_cursor_position.y].text, g_text_buffer[g_cursor_position.y + 1].text);
                     g_text_buffer.splice(g_cursor_position.y+1, 1);
                     update_cursor();
             }
             else {
-                g_text_buffer[g_cursor_position.y].splice(g_cursor_position.x, 1);
+                g_text_buffer[g_cursor_position.y].text.splice(g_cursor_position.x, 1);
                 update_cursor();
             }
             }
