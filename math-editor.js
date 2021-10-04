@@ -37,13 +37,6 @@ var g_canvas;
 var g_ctx;
 
 
-class key_press {
-    constructor(key) {
-        this.key = key;
-    }
-}
-
-
 function clamp(val, min, max) {
     return Math.min(Math.max(val, min), max);
 }
@@ -146,7 +139,7 @@ function something_is_selected() {
 }
 
 function insert_letter_at_cursor(key) {
-    g_text_buffer[g_cursor_position.y].splice(g_cursor_position.x, 0, new key_press(key));
+    g_text_buffer[g_cursor_position.y].splice(g_cursor_position.x, 0, key);
     increment_cursor_position(1, 0);
 }
 
@@ -196,7 +189,7 @@ function reload_buffer() {
     g_ctx.clearRect(0, 0, window.innerWidth*2, window.innerHeight*2); // Clear the canvas
     for (var i = 0; i < g_text_buffer.length; i++) {
         for (var j = 0; j < g_text_buffer[i].length; j++) {
-            write_key(g_text_buffer[i][j].key, false); // Simulate the key presses of the buffer without appending to the buffer
+            write_key(g_text_buffer[i][j], false); // Simulate the key presses of the buffer without appending to the buffer
         }
         g_cursor_position.y++;
         g_cursor_position.x = 0;
