@@ -263,40 +263,24 @@ function key_pressed(key, append_to_buffer) {
     }
     if (key.key.startsWith("Arrow")) {
         if (something_is_selected) {
-            if (key.key == 'ArrowRight') {
-                set_cursor_position(1, 0);
-            }
-            else if (key.key == 'ArrowLeft') {
-                increment_cursor_position(-1, 0);
-            }
-            else if (key.key == 'ArrowUp') {
-                increment_cursor_position(0, 1);
-            }
-            else if (key.key == 'ArrowDown') {
-                increment_cursor_position(0, -1);
-            }
             deselect_text();
         }
-        else {
-            if (key.key == 'ArrowRight') {
-                increment_cursor_position(1, 0);
-            }
-            else if (key.key == 'ArrowLeft') {
-                increment_cursor_position(-1, 0);
-            }
-            else if (key.key == 'ArrowUp') {
-                increment_cursor_position(0, 1);
-            }
-            else if (key.key == 'ArrowDown') {
-                increment_cursor_position(0, -1);
-            }
+        if (key.key == 'ArrowRight') {
+            increment_cursor_position(1, 0);
+        }
+        else if (key.key == 'ArrowLeft') {
+            increment_cursor_position(-1, 0);
+        }
+        else if (key.key == 'ArrowUp') {
+            increment_cursor_position(0, -1);
+        }
+        else if (key.key == 'ArrowDown') {
+            increment_cursor_position(0, 1);
         }
     }
     else {
         write_key(key.key, append_to_buffer);
     }
-
-
 }
 
 function write_key(key, append_to_buffer) {
