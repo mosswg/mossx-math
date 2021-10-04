@@ -6,7 +6,6 @@ const font_size = 30;
 
 
 const selection_alpha = 0.35;
-var something_is_selected = false;
 
 var max_height = 0;
 var max_width = 0;
@@ -26,12 +25,14 @@ const letter_space = new point(0, 5);
 const default_position = new point(15, 25);
 
 
-var g_text_buffer = [[]];
+var g_text_buffer = [[]]; /// TODO: Make custom row objects for each row of text
 var g_cursor_position = new point(0, 0);
 var g_cursor_visible = true;
 var g_cursor_interval;
 var g_cursor_size = new point(0, 0);
 var g_letter_spacing;
+var g_selection_start = new point(-1, -1);
+var g_selection_end = new point(-1, -1);
 var g_canvas;
 var g_ctx;
 
@@ -39,7 +40,6 @@ var g_ctx;
 class key_press {
     constructor(key) {
         this.key = key;
-        this.selected = false;
     }
 }
 
@@ -47,15 +47,9 @@ function clamp(val, min, max) {
     return Math.min(Math.max(val, min), max);
 }
 
-function calculate_text_size(string) {
-    return g_ctx.measureText(string);
-}
-
 function set_cursor_position(x, y) {
     y = clamp(y, 0, g_text_buffer.length-1);
     x = clamp(x, 0, g_text_buffer[y].length);
-
-    console.log(x, y);
 
     g_cursor_position.x = x;
     g_cursor_position.y = y;
@@ -66,10 +60,8 @@ function set_cursor_position(x, y) {
 }
 
 function increment_cursor_position(x, y) {
-    y = clamp(y, -g_cursor_position.y, g_text_buffer.length-1);
+    y = clamp(y, -g_cursor_position.y, g_text_buffer.length-1 - g_cursor_position.y);
     x = clamp(x, -g_cursor_position.x, g_text_buffer[g_cursor_position.y + y].length - g_cursor_position.x);
-
-    console.log('x: ' + x + ' y: ' + y)
 
     g_cursor_position.x += x;
     g_cursor_position.y += y;
@@ -77,6 +69,28 @@ function increment_cursor_position(x, y) {
     draw_cursor();
     clearInterval(g_cursor_interval);
     g_cursor_interval = setInterval(draw_cursor, cursor_blink_speed);
+}
+
+function select_row(row) {
+    start.x = 0;
+    start.y = row;
+    end.x = g_text_buffer[row].length;
+    end.y = row;
+}
+
+function deselect_text() {
+    g_selection_start.x = -1;
+    g_selection_start.y = -1;
+    g_selection_end.x = -1;
+    g_selection_end.y = -1;
+    reload_buffer();
+}
+
+function set_text_selected(from, to) {
+    g_selection_start.x = from.x;
+    g_selection_start.y = from.y;
+    g_selection_end.x = to.x;
+    g_selection_end.y = to.y;
 }
 
 function cursor_x_to_pixels(x) {
@@ -102,46 +116,41 @@ function get_cursor_y_in_pixels() {
     return cursor_y_to_pixels(g_cursor_position.y);
 }
 
+function something_is_selected() {
+    return g_selection_start.x !== -1 && g_selection_start.y !== -1 && g_selection_end.x !== -1 && g_selection_end.y !== -1;
+}
+
 function insert_letter_at_cursor(key) {
     g_text_buffer[g_cursor_position.y].splice(g_cursor_position.x, 0, new key_press(key));
     increment_cursor_position(1, 0);
     reload_buffer();
 }
 
-function set_text_selected(from, to, selected = true) {
-    for (var i = from.y; i < to.y; i++) {
-        for (var j = from.x; j < to.x; j++) {
-            g_text_buffer[i][j].selected = selected;
-        }
-    }
-}
-
-function select_row(row, selected = true) {
-    for (var i = 0; i < g_text_buffer[row].length; i++) {
-        g_text_buffer[row][i].selected = selected;
-    }
-}
-
-function deselect_text() {
-    for (var i = 0; i < g_text_buffer.length; i++) {
-        for (var j = 0; j < g_text_buffer[i].length; j++) {
-            g_text_buffer[i][j].selected = false;
-        }
-    }
-    something_is_selected = false;
-    reload_buffer();
-}
-
 function delete_selected() {
-    if (something_is_selected) {
-        for (var i = 0; i < g_text_buffer.length; i++) {
-            for (var j = 0; j < g_text_buffer[i].length; j++) {
-                if (g_text_buffer[i][j].selected) {
-                    g_text_buffer[i].splice(j--, 1);
-                }
+    if (something_is_selected()) {
+        var start_y = clamp(Math.min(g_selection_start.y, g_selection_end.y), 0, g_text_buffer.length);
+        var start_x = clamp(Math.min(g_selection_start.x, g_selection_end.x), 0, g_text_buffer[start_y].length);
+        var end_y = clamp(Math.max(g_selection_start.y, g_selection_end.y), 0, g_text_buffer.length);
+        var end_x = clamp(Math.max(g_selection_start.x, g_selection_end.x), 0, g_text_buffer[end_y].length);
+        console.log(start_x, start_y, end_x, end_y);
+        for (var i = start_y; i <= end_y; i++) {
+            for (var j = start_x; j <= end_x; j++) {
+                g_text_buffer[i].splice(start_x, 1);
             }
         }
     }
+
+    g_selection_start.x = -1;
+    g_selection_start.y = -1;
+    g_selection_end.x = -1;
+    g_selection_end.y = -1;
+}
+
+function position_of_first_selected_letter() {
+    if (something_is_selected()) {
+        return g_selection_start;
+    }
+    return undefined;
 }
 
 function draw_cursor() {
@@ -164,8 +173,6 @@ function draw_selection(start_point, end_point) {
         g_ctx.rect(cursor_x_to_pixels(start_point.x)-g_letter_spacing/2, cursor_y_to_pixels(start_point.y) - max_height, cursor_x_to_pixels(end_point.x) + g_letter_spacing/2, (end_point.y + 1) * g_cursor_size.y);
         g_ctx.fill();
         g_ctx.globalAlpha = 1;
-        console.log(start_point);
-        console.log(end_point);
     }
 }
 
@@ -188,31 +195,18 @@ function reload_buffer() {
     g_cursor_position.y = pushed_cursor_position_y;
 
     // Highlight Selected Text
-    var start_point = new point(-1, -1);
-    var end_point = new point(-1, -1);
-    for (var i = 0; i < g_text_buffer.length; i++) {
-        for (var j = 0; j < g_text_buffer[i].length; j++) {
-            if (g_text_buffer[i][j].selected) {
-                if (start_point.x === -1 && start_point.y === -1) {
-                    start_point.x = i;
-                    start_point.y = j;
-                }
-                end_point.x = i;
-                end_point.y = j;
-            }
-            else {
-                draw_selection(start_point, end_point);
-                start_point.x = -1;
-                start_point.y = -1;
-            }
-        }
+    if (something_is_selected()) {
+        var start_y = clamp(Math.min(g_selection_start.y, g_selection_end.y), 0, g_text_buffer.length);
+        var start_x = clamp(Math.min(g_selection_start.x, g_selection_end.x), 0, g_text_buffer[start_y].length);
+        var end_y = clamp(Math.max(g_selection_start.y, g_selection_end.y), 0, g_text_buffer.length);
+        var end_x = clamp(Math.max(g_selection_start.x, g_selection_end.x), 0, g_text_buffer[end_y].length);
+        draw_selection(new point(start_x, start_y), new point(end_x, end_y));
     }
-    draw_selection(start_point, end_point);
 }
 
 function calculate_max_letter_size() { 
     for (var i = 'a'; i <= 'z'; i = String.fromCharCode(i.charCodeAt(0) + 1)) {
-        letter_size = calculate_text_size(i);
+        letter_size = g_ctx.measureText(i);
         height = letter_size.actualBoundingBoxAscent - letter_size.actualBoundingBoxDescent;
         if (height > max_height) {
             max_height = height;
@@ -224,57 +218,98 @@ function key_pressed_listener(e) {
     key_pressed(e, true);
 }
 
-
 function mouse_click_listener(e) {
     deselect_text();
     rect = g_canvas.getBoundingClientRect()
-    var mouse_x = e.clientX - rect.left;
+    var mouse_x = e.clientX - rect.left + g_letter_spacing/2; // We're offseting by half the letter width so that we round based on the middle of the letter and not the end 
     var mouse_y = e.clientY - rect.top;
 
     set_cursor_position(Math.round(pixel_x_to_cursor(mouse_x)), Math.round(pixel_y_to_cursor(mouse_y)));
 }
 
+
+
 function key_pressed(key, append_to_buffer) {
     if (key.ctrlKey) {
-        if (key.key == 'a') {
-            for (var i = 0; i < g_text_buffer.length; i++) {
-                for (var j = 0; j < g_text_buffer[i].length; j++) {
-                    g_text_buffer[i][j].selected = true;
-                }
-            }
-            something_is_selected = true;
-            reload_buffer();
+        switch(key.key) {
+            case 'a':
+                g_selection_start.x = 0;
+                g_selection_start.y = 0;
+                g_selection_end.x = g_text_buffer[g_text_buffer.length-1].length-1; /// FIXME: We should find the max row width instead 
+                g_selection_end.y = g_text_buffer.length-1;
+                reload_buffer();
+                break;
         }
-
         return;
     }
     
-    if (key.shiftKey) {
-        if (key.key == 'ArrowLeft') {
-            g_text_buffer[g_cursor_position.y][g_cursor_position.x-1].selected = true;
-            something_is_selected = true;
-            increment_cursor_position(-1, 0);
-        }
-    }
 
 
     if (key.key.length != 1 && key.key.startsWith("F")) { // Ignore function keys
         return;
     }
     if (key.key.startsWith("Arrow")) {
-        if (something_is_selected) {
+        if (!key.shiftKey) {
             deselect_text();
         }
         if (key.key == 'ArrowRight') {
+            if (key.shiftKey) {
+                if (!something_is_selected()) {
+                    console.log(g_selection_start);
+                    console.log(g_selection_end);
+                    g_selection_start.x = g_cursor_position.x;
+                    g_selection_start.y = g_cursor_position.y;
+                    g_selection_end.x = g_cursor_position.x+1;
+                    g_selection_end.y = g_cursor_position.y;
+                }
+                else {
+                    g_selection_end.x++;
+                }
+            }
             increment_cursor_position(1, 0);
         }
         else if (key.key == 'ArrowLeft') {
+            if (key.shiftKey) {
+                if (!something_is_selected()) {
+                    console.log(g_selection_start);
+                    console.log(g_selection_end);
+                    g_selection_start.x = g_cursor_position.x;
+                    g_selection_start.y = g_cursor_position.y;
+                    g_selection_end.x = g_cursor_position.x-1;
+                    g_selection_end.y = g_cursor_position.y;
+                }
+                else {
+                    g_selection_end.x--;
+                }
+            }
             increment_cursor_position(-1, 0);
         }
         else if (key.key == 'ArrowUp') {
+            if (key.shiftKey) {
+                if (!something_is_selected()) {
+                    g_selection_start.x = g_cursor_position.x;
+                    g_selection_start.y = g_cursor_position.y;
+                    g_selection_end.x = g_cursor_position.x;
+                    g_selection_end.y = g_cursor_position.y-1;
+                }
+                else {
+                    g_selection_end.y--;
+                }
+            }
             increment_cursor_position(0, -1);
         }
         else if (key.key == 'ArrowDown') {
+            if (key.shiftKey) {
+                if (!something_is_selected()) {
+                    g_selection_start.x = g_cursor_position.x;
+                    g_selection_start.y = g_cursor_position.y;
+                    g_selection_end.x = g_cursor_position.x;
+                    g_selection_end.y = g_cursor_position.y+1;
+                }
+                else {
+                    g_selection_end.y++;
+                }
+            }
             increment_cursor_position(0, 1);
         }
     }
@@ -304,7 +339,7 @@ function write_key(key, append_to_buffer) {
             return;
         case "Backspace":
             if (something_is_selected) {
-                delete_selected()
+                delete_selected();
             }
             else {
                 if (g_cursor_position.x === 0 && g_cursor_position.y === 0) { return; } // Ignore a backspace at the beginning of the screen
@@ -339,22 +374,17 @@ function write_key(key, append_to_buffer) {
             }
             reload_buffer();
             return;
-        case " ":
-            if (append_to_buffer) {
-                insert_letter_at_cursor(key);
-            }
-            else {
-                g_cursor_position.x++;
-            }
-            return;
-
+        case "Tab":
         case "CapsLock":
             return;
-
         default:
-            console.log(get_cursor_y_in_pixels());
             g_ctx.fillText(key, get_cursor_x_in_pixels(), get_cursor_y_in_pixels());
             if (append_to_buffer) {
+                if (something_is_selected()) {
+                    var selection_position = position_of_first_selected_letter();
+                    set_cursor_position(selection_position.x, selection_position.y);
+                    delete_selected();
+                }
                 insert_letter_at_cursor(key);
             }
             else {
@@ -383,7 +413,7 @@ function load() {
 
     calculate_max_letter_size();
 
-    g_letter_spacing = calculate_text_size('w').width;
+    g_letter_spacing = g_ctx.measureText('w').width;
     g_cursor_size.y = max_height;
     g_cursor_size.x = 2;
 
