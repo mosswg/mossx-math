@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<title>Moss | Math Editor</title>
+
+<script src=math-editor.js></script>
+<script src="Menu/Menu.js"></script>
+<head >
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-F3w7mX95PdgyTmZZMECAngseQB83DfGTowi0iMjiWaeVhAn4FJkqJByhZMI3AhiU" crossorigin="anonymous">
+
+    <link href="Menu/Menu.css" rel="stylesheet">
+</head>
+<meta charset="UTF-8"/>
+
+
+    <style>
+       #editor {
+           width: 90%;
+           height: 90%;
+           top: 5%;
+           left: 5%;
+           position: absolute;
+       }
+    </style>
+
+    <body class="bg-dark text-secondary" onload="load();">
+        <div class="menu_vertical position-absolute">
+            <!-- <script type="text/javascript">
+                create_menu();
+                create_footer();
+            </script> -->
+        </div>
+        </br>
+        <canvas id="editor">
+        </canvas>    
+
+
+    </body>
+
+</html>
