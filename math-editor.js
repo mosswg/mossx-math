@@ -10,7 +10,7 @@ const selection_alpha = 0.35;
 var max_height = 0;
 var max_width = 0;
 
-const cursor_blink_speed = 500;
+const cursor_blink_speed = 300;
 
 
 class point {
@@ -43,6 +43,7 @@ class key_press {
     }
 }
 
+
 function clamp(val, min, max) {
     return Math.min(Math.max(val, min), max);
 }
@@ -53,10 +54,8 @@ function set_cursor_position(x, y) {
 
     g_cursor_position.x = x;
     g_cursor_position.y = y;
-    reload_buffer();
-    draw_cursor();
-    clearInterval(g_cursor_interval);
-    g_cursor_interval = setInterval(draw_cursor, cursor_blink_speed);
+
+    update_cursor();
 }
 
 function increment_cursor_position(x, y) {
@@ -65,10 +64,29 @@ function increment_cursor_position(x, y) {
 
     g_cursor_position.x += x;
     g_cursor_position.y += y;
+
+    update_cursor();
+}
+
+function update_cursor() {
+    clearInterval(g_cursor_interval);
+    g_cursor_visible = true;
+    g_cursor_interval = setInterval(draw_cursor, cursor_blink_speed);
     reload_buffer();
     draw_cursor();
-    clearInterval(g_cursor_interval);
-    g_cursor_interval = setInterval(draw_cursor, cursor_blink_speed);
+}
+
+function draw_cursor() {
+    if (g_cursor_visible) {
+        g_ctx.beginPath();
+        g_ctx.rect(get_cursor_x_in_pixels() - (g_letter_spacing/2 + g_cursor_size.x), get_cursor_y_in_pixels() - g_cursor_size.y, g_cursor_size.x, g_cursor_size.y);
+        g_ctx.fill();
+    }
+    else {
+        g_ctx.clearRect(get_cursor_x_in_pixels() - (g_letter_spacing/2 + g_cursor_size.x), get_cursor_y_in_pixels() - g_cursor_size.y, g_cursor_size.x, g_cursor_size.y);
+    }
+
+    g_cursor_visible = !g_cursor_visible;
 }
 
 function select_row(row) {
@@ -91,6 +109,13 @@ function set_text_selected(from, to) {
     g_selection_start.y = from.y;
     g_selection_end.x = to.x;
     g_selection_end.y = to.y;
+}
+
+function start_selection_at(point) {
+    g_selection_start.x = point.x;
+    g_selection_start.y = point.y;
+    g_selection_end.x = point.x;
+    g_selection_end.y = point.y;
 }
 
 function cursor_x_to_pixels(x) {
@@ -123,7 +148,6 @@ function something_is_selected() {
 function insert_letter_at_cursor(key) {
     g_text_buffer[g_cursor_position.y].splice(g_cursor_position.x, 0, new key_press(key));
     increment_cursor_position(1, 0);
-    reload_buffer();
 }
 
 function delete_selected() {
@@ -134,7 +158,7 @@ function delete_selected() {
         var end_x = clamp(Math.max(g_selection_start.x, g_selection_end.x), 0, g_text_buffer[end_y].length);
         console.log(start_x, start_y, end_x, end_y);
         for (var i = start_y; i <= end_y; i++) {
-            for (var j = start_x; j <= end_x; j++) {
+            for (var j = start_x; j < end_x; j++) {
                 g_text_buffer[i].splice(start_x, 1);
             }
         }
@@ -153,24 +177,11 @@ function position_of_first_selected_letter() {
     return undefined;
 }
 
-function draw_cursor() {
-    if (g_cursor_visible) {
-        g_ctx.beginPath();
-        g_ctx.rect(get_cursor_x_in_pixels() - (g_letter_spacing/2 + g_cursor_size.x), get_cursor_y_in_pixels() - g_cursor_size.y, g_cursor_size.x, g_cursor_size.y);
-        g_ctx.fill();
-    }
-    else {
-        g_ctx.clearRect(get_cursor_x_in_pixels() - (g_letter_spacing/2 + g_cursor_size.x), get_cursor_y_in_pixels() - g_cursor_size.y, g_cursor_size.x, g_cursor_size.y);
-    }
-
-    g_cursor_visible = !g_cursor_visible;
-}
-
 function draw_selection(start_point, end_point) {
     if (start_point.x !== -1 && start_point.y !== -1) {
         g_ctx.globalAlpha = selection_alpha;
         g_ctx.beginPath();
-        g_ctx.rect(cursor_x_to_pixels(start_point.x)-g_letter_spacing/2, cursor_y_to_pixels(start_point.y) - max_height, cursor_x_to_pixels(end_point.x) + g_letter_spacing/2, (end_point.y + 1) * g_cursor_size.y);
+        g_ctx.rect(cursor_x_to_pixels(start_point.x)-g_letter_spacing/2, cursor_y_to_pixels(start_point.y) - max_height, g_letter_spacing * Math.abs(start_point.x - end_point.x), (end_point.y + 1) * g_cursor_size.y);
         g_ctx.fill();
         g_ctx.globalAlpha = 1;
     }
@@ -254,63 +265,72 @@ function key_pressed(key, append_to_buffer) {
         }
         if (key.key == 'ArrowRight') {
             if (key.shiftKey) {
+                console.log(something_is_selected());
                 if (!something_is_selected()) {
-                    console.log(g_selection_start);
-                    console.log(g_selection_end);
-                    g_selection_start.x = g_cursor_position.x;
-                    g_selection_start.y = g_cursor_position.y;
-                    g_selection_end.x = g_cursor_position.x+1;
-                    g_selection_end.y = g_cursor_position.y;
+                    start_selection_at(g_cursor_position);
                 }
-                else {
-                    g_selection_end.x++;
-                }
+                g_selection_end.x++;
+                g_cursor_position.x++;
+                update_cursor();
             }
-            increment_cursor_position(1, 0);
+            else if (g_cursor_position.x === g_text_buffer[g_cursor_position.y].length && g_text_buffer.length !== 1 && g_cursor_position.y !== g_text_buffer.length-1) {
+                g_cursor_position.x = 0; 
+                increment_cursor_position(0, 1);
+            }
+            else {
+                increment_cursor_position(1, 0);
+            }
         }
         else if (key.key == 'ArrowLeft') {
             if (key.shiftKey) {
                 if (!something_is_selected()) {
-                    console.log(g_selection_start);
-                    console.log(g_selection_end);
-                    g_selection_start.x = g_cursor_position.x;
-                    g_selection_start.y = g_cursor_position.y;
-                    g_selection_end.x = g_cursor_position.x-1;
-                    g_selection_end.y = g_cursor_position.y;
+                    start_selection_at(g_cursor_position);
                 }
-                else {
-                    g_selection_end.x--;
-                }
+                g_selection_end.x--;
+                g_cursor_position.x--;
+                update_cursor();
             }
-            increment_cursor_position(-1, 0);
+            else if (g_cursor_position.x === 0 && g_cursor_position.y !== 0) {
+                g_cursor_position.x = g_text_buffer[g_cursor_position.y-1].length; 
+                increment_cursor_position(0, -1);
+            }
+            else {
+                increment_cursor_position(-1, 0);
+            }
         }
         else if (key.key == 'ArrowUp') {
             if (key.shiftKey) {
                 if (!something_is_selected()) {
-                    g_selection_start.x = g_cursor_position.x;
-                    g_selection_start.y = g_cursor_position.y;
-                    g_selection_end.x = g_cursor_position.x;
-                    g_selection_end.y = g_cursor_position.y-1;
+                    start_selection_at(g_cursor_position);
                 }
-                else {
-                    g_selection_end.y--;
-                }
+                g_selection_end.y--;
+                g_cursor_position.y--;
+                update_cursor();
             }
-            increment_cursor_position(0, -1);
+            else if (g_cursor_position.y === 0) {
+                g_cursor_position.x = 0;
+                update_cursor();
+            }
+            else {
+                increment_cursor_position(0, -1);
+            }
         }
         else if (key.key == 'ArrowDown') {
             if (key.shiftKey) {
                 if (!something_is_selected()) {
-                    g_selection_start.x = g_cursor_position.x;
-                    g_selection_start.y = g_cursor_position.y;
-                    g_selection_end.x = g_cursor_position.x;
-                    g_selection_end.y = g_cursor_position.y+1;
+                    start_selection_at(g_cursor_position);
                 }
-                else {
-                    g_selection_end.y++;
-                }
+                g_selection_end.y++;
+                g_cursor_position.y++;
+                update_cursor();
             }
-            increment_cursor_position(0, 1);
+            else if (g_cursor_position.y === g_text_buffer.length-1) {
+                g_cursor_position.x = g_text_buffer[g_cursor_position.y].length; 
+                update_cursor();
+            }
+            else {
+                increment_cursor_position(0, 1);
+            }
         }
     }
     else {
@@ -338,7 +358,7 @@ function write_key(key, append_to_buffer) {
             }
             return;
         case "Backspace":
-            if (something_is_selected) {
+            if (something_is_selected()) {
                 delete_selected();
             }
             else {
@@ -357,20 +377,20 @@ function write_key(key, append_to_buffer) {
             reload_buffer();
             return;
         case "Delete":
-            if (something_is_selected) {
+            if (something_is_selected()) {
                 delete_selected();
             }
+            else {                
+                if (g_cursor_position.x === g_text_buffer[g_cursor_position.y].length) {
+                    next_line_length = g_text_buffer[g_cursor_position.y + 1].length;
+                    g_text_buffer[g_cursor_position.y].push.apply(g_text_buffer[g_cursor_position.y], g_text_buffer[g_cursor_position.y + 1]);
+                    g_text_buffer.splice(g_cursor_position.y+1, 1);
+                    update_cursor();
+            }
             else {
-                g_text_buffer[g_cursor_position.y].splice(g_cursor_position.x + 1, 1);
-                if (g_cursor_position.x === 0) {
-                    previous_line_length = g_text_buffer[g_cursor_position.y - 1].length;
-                    g_text_buffer[g_cursor_position.y + 1].push.apply(g_text_buffer[g_cursor_position.y + 1], g_text_buffer[g_cursor_position.y]);
-                    g_text_buffer.splice(g_cursor_position.y, 1);
-                    set_cursor_position(previous_line_length, g_cursor_position.y + 1);
-                }
-                else {
-                    increment_cursor_position(1, 0);
-                }
+                g_text_buffer[g_cursor_position.y].splice(g_cursor_position.x, 1);
+                update_cursor();
+            }
             }
             reload_buffer();
             return;
