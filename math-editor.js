@@ -24,12 +24,62 @@ class line {
     constructor() {
         this.text = [];
         this.selection = new point(0, 0);
-        this.selection.start = new point(-1, -1);
-        this.selection.end = new point(-1, -1);
+        this.selection.start = -1;   /// FIXME: This is a hack. 
+        this.selection.end = -1;     ///        We really shouldn't be adding imaginary fields to a point object. But x and y don't make sense for this object
     }
 
+    /**
+     * @returns length of the line.
+     */
     length() {
         return this.text.length;
+    }
+
+    /**
+     * Deselects the entire line of text.
+     */
+    deselect_text() {
+        this.selection.start = -1;
+        this.selection.end = -1;
+    }
+
+    /**
+     * @param {number} from - The start of the selection
+     * @param {number} to - The end of the selection
+     * 
+     * At -1 Signifies the end of the array.
+     */
+    select_text(from, to) {
+        if (from === -1) { from = this.text.length; }
+        if (to === -1) { to = this.text.length; }
+        this.selection.start = from;
+        this.selection.end = to;
+    }
+
+    /**
+     * Selects the entire line of text.
+     */
+    select_line() {
+        this.selection.start = 0;
+        this.selection.end = this.text.length-1;
+    }
+
+    /**
+     * 
+     * @returns {boolean} Whether any of the text is selected.
+     */
+    is_selected() {
+        return this.selection.start !== -1 && this.selection.end !== -1;
+    }
+
+    /**
+     * Deleted selected text from the line.
+     */
+    remove_selection() {
+        for (var i = 0; i < Math.abs(this.selection.start - this.selection.end); i++) {
+            this.text.splice(Math.min(this.selection.start, this.selection.end), 1); 
+        }
+        this.deselect_text();
     }
 }
 
@@ -95,32 +145,65 @@ function draw_cursor() {
 }
 
 function select_row(row) {
-    start.x = 0;
-    start.y = row;
-    end.x = g_text_buffer[row].length();
-    end.y = row;
+    g_text_buffer[row].select_line();
 }
 
 function deselect_text() {
-    g_selection_start.x = -1;
-    g_selection_start.y = -1;
-    g_selection_end.x = -1;
-    g_selection_end.y = -1;
+    for (var i = 0; i < g_text_buffer.length; i++) {
+        g_text_buffer[i].deselect_text();
+    }
     reload_buffer();
 }
 
 function set_text_selected(from, to) {
-    g_selection_start.x = from.x;
-    g_selection_start.y = from.y;
-    g_selection_end.x = to.x;
-    g_selection_end.y = to.y;
+    if (from.y === to.y) {
+        g_text_buffer[y].select_text(from.x, to.x);
+    }
+    else {
+        g_text_buffer[from.y].select_text(from.x, -1);
+        for (var i = from.y; i < to.y; i++) {
+            g_text_buffer[i].select_text(0, -1);
+        }
+        g_text_buffer[to.y].select_text(0, to.x);
+    }
 }
 
 function start_selection_at(point) {
-    g_selection_start.x = point.x;
-    g_selection_start.y = point.y;
-    g_selection_end.x = point.x;
-    g_selection_end.y = point.y;
+    g_text_buffer[point.y].select_text(point.x, point.x);
+}
+
+function increment_selection_position(x, y) {
+    if (!g_text_buffer[g_cursor_position.y + y].is_selected()) {
+        g_text_buffer[g_cursor_position.y + y].select_text(g_cursor_position.x, g_cursor_position.x);
+    }
+    if (y !== 0) { 
+        g_text_buffer[g_cursor_position.y + y].selection.start = g_text_buffer[g_cursor_position.y].selection.start;
+        g_text_buffer[g_cursor_position.y + y].selection.end = g_text_buffer[g_cursor_position.y].selection.end;
+    }
+    g_text_buffer[g_cursor_position.y + y].selection.end+=x;
+}
+
+function something_is_selected() {
+    for (var i = 0; i < g_text_buffer.length; i++) {
+        if (g_text_buffer[i].is_selected()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function delete_selected() {
+    for (var i = 0; i < g_text_buffer.length; i++) {
+        g_text_buffer[i].remove_selection();
+    }
+}
+
+function draw_selection(start_point, end_point, row = g_cursor_position.y) {
+    g_ctx.globalAlpha = selection_alpha;
+    g_ctx.beginPath();
+    g_ctx.rect(cursor_x_to_pixels(start_point)-g_letter_spacing/2, cursor_y_to_pixels(row) - max_height, g_letter_spacing * Math.abs(start_point - end_point), g_cursor_size.y);
+    g_ctx.fill();
+    g_ctx.globalAlpha = 1;
 }
 
 function cursor_x_to_pixels(x) {
@@ -146,33 +229,9 @@ function get_cursor_y_in_pixels() {
     return cursor_y_to_pixels(g_cursor_position.y);
 }
 
-function something_is_selected() {
-    return g_selection_start.x !== -1 && g_selection_start.y !== -1 && g_selection_end.x !== -1 && g_selection_end.y !== -1;
-}
-
 function insert_letter_at_cursor(key) {
     g_text_buffer[g_cursor_position.y].text.splice(g_cursor_position.x, 0, key);
     increment_cursor_position(1, 0);
-}
-
-function delete_selected() {
-    if (something_is_selected()) {
-        var start_y = clamp(Math.min(g_selection_start.y, g_selection_end.y), 0, g_text_buffer.length);
-        var start_x = clamp(Math.min(g_selection_start.x, g_selection_end.x), 0, g_text_buffer[start_y].length());
-        var end_y = clamp(Math.max(g_selection_start.y, g_selection_end.y), 0, g_text_buffer.length);
-        var end_x = clamp(Math.max(g_selection_start.x, g_selection_end.x), 0, g_text_buffer[end_y].length());
-        console.log(start_x, start_y, end_x, end_y);
-        for (var i = start_y; i <= end_y; i++) {
-            for (var j = start_x; j < end_x; j++) {
-                g_text_buffer[i].text.splice(start_x, 1);
-            }
-        }
-    }
-
-    g_selection_start.x = -1;
-    g_selection_start.y = -1;
-    g_selection_end.x = -1;
-    g_selection_end.y = -1;
 }
 
 function position_of_first_selected_letter() {
@@ -180,16 +239,6 @@ function position_of_first_selected_letter() {
         return g_selection_start;
     }
     return undefined;
-}
-
-function draw_selection(start_point, end_point) {
-    if (start_point.x !== -1 && start_point.y !== -1) {
-        g_ctx.globalAlpha = selection_alpha;
-        g_ctx.beginPath();
-        g_ctx.rect(cursor_x_to_pixels(start_point.x)-g_letter_spacing/2, cursor_y_to_pixels(start_point.y) - max_height, g_letter_spacing * Math.abs(start_point.x - end_point.x), (end_point.y + 1) * g_cursor_size.y);
-        g_ctx.fill();
-        g_ctx.globalAlpha = 1;
-    }
 }
 
 function reload_buffer() {
@@ -212,11 +261,17 @@ function reload_buffer() {
 
     // Highlight Selected Text
     if (something_is_selected()) {
-        var start_y = clamp(Math.min(g_selection_start.y, g_selection_end.y), 0, g_text_buffer.length);
-        var start_x = clamp(Math.min(g_selection_start.x, g_selection_end.x), 0, g_text_buffer[start_y].length());
-        var end_y = clamp(Math.max(g_selection_start.y, g_selection_end.y), 0, g_text_buffer.length);
-        var end_x = clamp(Math.max(g_selection_start.x, g_selection_end.x), 0, g_text_buffer[end_y].length());
-        draw_selection(new point(start_x, start_y), new point(end_x, end_y));
+        var start;
+        var end;
+        
+        for (var i = 0; i < g_text_buffer.length; i++) { /// TODO: Optimize this
+            if (g_text_buffer[i].is_selected) {
+                start = clamp(Math.min(g_text_buffer[i].selection.start, g_text_buffer[i].selection.end), 0, g_text_buffer[i].length());
+                end = clamp(Math.max(g_text_buffer[i].selection.start, g_text_buffer[i].selection.end), 0, g_text_buffer[i].length());
+                draw_selection(start, end, i);
+            }
+        }
+
     }
 }
 
@@ -270,13 +325,12 @@ function key_pressed(key, append_to_buffer) {
         }
         if (key.key == 'ArrowRight') {
             if (key.shiftKey) {
-                console.log(something_is_selected());
                 if (!something_is_selected()) {
-                    start_selection_at(g_cursor_position);
+                    g_text_buffer[g_cursor_position.y].selection.start = g_cursor_position.x;
+                    g_text_buffer[g_cursor_position.y].selection.end = g_cursor_position.x;
                 }
-                g_selection_end.x++;
-                g_cursor_position.x++;
-                update_cursor();
+                increment_selection_position(1, 0);
+                increment_cursor_position(1, 0);
             }
             else if (g_cursor_position.x === g_text_buffer[g_cursor_position.y].length() && g_text_buffer.length !== 1 && g_cursor_position.y !== g_text_buffer.length-1) {
                 g_cursor_position.x = 0; 
@@ -289,11 +343,11 @@ function key_pressed(key, append_to_buffer) {
         else if (key.key == 'ArrowLeft') {
             if (key.shiftKey) {
                 if (!something_is_selected()) {
-                    start_selection_at(g_cursor_position);
+                    g_text_buffer[g_cursor_position.y].selection.start = g_cursor_position.x;
+                    g_text_buffer[g_cursor_position.y].selection.end = g_cursor_position.x;
                 }
-                g_selection_end.x--;
-                g_cursor_position.x--;
-                update_cursor();
+                increment_selection_position(-1, 0);
+                increment_cursor_position(-1, 0);
             }
             else if (g_cursor_position.x === 0 && g_cursor_position.y !== 0) {
                 g_cursor_position.x = g_text_buffer[g_cursor_position.y-1].length(); 
@@ -305,12 +359,14 @@ function key_pressed(key, append_to_buffer) {
         }
         else if (key.key == 'ArrowUp') {
             if (key.shiftKey) {
-                if (!something_is_selected()) {
-                    start_selection_at(g_cursor_position);
+                if (g_cursor_position.y != 0) {
+                    if (!something_is_selected()) {
+                        g_text_buffer[g_cursor_position.y-1].selection.start = g_cursor_position.x;
+                        g_text_buffer[g_cursor_position.y-1].selection.end = g_cursor_position.x;
+                    }
+                    increment_selection_position(0, -1);
+                    increment_cursor_position(0, -1);
                 }
-                g_selection_end.y--;
-                g_cursor_position.y--;
-                update_cursor();
             }
             else if (g_cursor_position.y === 0) {
                 g_cursor_position.x = 0;
@@ -322,12 +378,13 @@ function key_pressed(key, append_to_buffer) {
         }
         else if (key.key == 'ArrowDown') {
             if (key.shiftKey) {
-                if (!something_is_selected()) {
-                    start_selection_at(g_cursor_position);
+                if (g_cursor_position.y != g_text_buffer.length - 1) {
+                    if (!something_is_selected()) {
+                        start_selection_at(g_cursor_position);
+                    }
+                    increment_selection_position(0, 1);
+                    increment_cursor_position(0, 1);
                 }
-                g_selection_end.y++;
-                g_cursor_position.y++;
-                update_cursor();
             }
             else if (g_cursor_position.y === g_text_buffer.length-1) {
                 g_cursor_position.x = g_text_buffer[g_cursor_position.y].length(); 
