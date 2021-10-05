@@ -194,8 +194,13 @@ function something_is_selected() {
 
 function delete_selected() {
     for (var i = 0; i < g_text_buffer.length; i++) {
-        g_text_buffer[i].remove_selection();
+        if (g_text_buffer[i].is_selected()) {
+            g_cursor_position.x = Math.min(g_text_buffer[i].selection.start, g_text_buffer[i].selection.end);
+            g_cursor_position.y = i;
+            g_text_buffer[i].remove_selection();
+        }
     }
+    update_cursor();
 }
 
 function draw_selection(start_point, end_point, row = g_cursor_position.y) {
