@@ -107,16 +107,38 @@ class line {
 
     remove_char_at(idx) {
         var curr = 0;
+        console.log(idx);
         for (var i = 0; i < this.char_length(); curr++) {
-            console.log(curr);
-            if (idx < this.text[curr].length + i) {
-                this.text[curr] = this.text[curr].substring(0, idx - curr) + this.text[i].substring(idx - curr + 1);
+            console.log(this.text[curr], line.get_modified_length(this.text[curr]) + i);
+            if (idx <= line.get_modified_length(this.text[curr]) + i) {
+                if (this.text[curr].length !== 1 && !is_valid_symbol(this.text[curr])) {
+                    this.text[curr] = this.text[curr].substring(0, idx - curr) + this.text[i].substring(idx - curr + 1);
+                }
+                else {
+                    this.text.splice(curr, 1);
+                }
                 break;
             }
             else {
-                i += this.text[i].length;
+                i += line.get_modified_length(this.text[curr]);
             }
         }
+    }
+
+    /**
+     * @param {String} text The text whose length will be gotten.
+     * @returns {Number} the length of the text as it is displayed.
+     */
+    static get_modified_length(text) {
+        if (is_valid_symbol(text)) {
+            return 1;
+        }
+        
+        if (text.startsWith("{")) {
+            return text.length - 2;
+        }
+        
+        return text.length;
     }
 }
 
@@ -259,6 +281,9 @@ var g_canvas;
 var g_ctx;
 
 function is_valid_symbol(symbol) {
+    if (symbol.startsWith('\\')) {
+        symbol = symbol.substring(1); // Trim the leading backslash.
+    }
     return valid_math_symbols[symbol] != undefined;
 }
 
@@ -506,7 +531,7 @@ function arrow_key_pressed(key) {
                 increment_selection_position(1, 0);
                 increment_cursor_position(1, 0);
             }
-            else if (g_cursor_position.x === g_text_buffer[g_cursor_position.y].length() && g_text_buffer.length !== 1 && g_cursor_position.y !== g_text_buffer.length-1) {
+            else if (g_cursor_position.x === g_text_buffer[g_cursor_position.y].char_length() && g_text_buffer.length !== 1 && g_cursor_position.y !== g_text_buffer.length-1) {
                 g_cursor_position.x = 0; 
                 increment_cursor_position(0, 1);
             }
@@ -524,7 +549,7 @@ function arrow_key_pressed(key) {
                 increment_cursor_position(-1, 0);
             }
             else if (g_cursor_position.x === 0 && g_cursor_position.y !== 0) {
-                g_cursor_position.x = g_text_buffer[g_cursor_position.y-1].length(); 
+                g_cursor_position.x = g_text_buffer[g_cursor_position.y-1].char_length(); 
                 increment_cursor_position(0, -1);
             }
             else {
@@ -552,7 +577,7 @@ function arrow_key_pressed(key) {
             break;
         case "ArrowDown":
             if (key.shiftKey) {
-                if (g_cursor_position.y != g_text_buffer.length - 1) {
+                if (g_cursor_position.y != g_text_buffer.char_length() - 1) {
                     if (!something_is_selected()) {
                         start_selection_at(g_cursor_position);
                     }
@@ -561,7 +586,7 @@ function arrow_key_pressed(key) {
                 }
             }
             else if (g_cursor_position.y === g_text_buffer.length-1) {
-                g_cursor_position.x = g_text_buffer[g_cursor_position.y].length(); 
+                g_cursor_position.x = g_text_buffer[g_cursor_position.y].char_length(); 
                 update_cursor();
             }
             else {
