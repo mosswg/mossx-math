@@ -29,10 +29,32 @@ class line {
     }
 
     /**
-     * @returns length of the line.
+     * @returns length of the line in elements.
      */
     length() {
         return this.text.length;
+    }
+
+
+    /**
+     * 
+     * @returns length of the line in drawn characters.
+     */
+    char_length() {
+        var length = 0;
+        for (var i = 0; i < this.text.length; i++) {
+            if (this.text[i].startsWith('\\')) {
+                length++;
+            }
+            else {
+            length += this.text[i].length;
+            }
+
+            if (this.text[i].length !== 1 && this.text[i].startsWith('{')) {
+                length-=2;
+            }
+        }
+        return length;
     }
 
     /**
@@ -89,15 +111,21 @@ const default_position = new point(15, 25);
 
 
 var g_text_buffer = [new line()];
+var g_tmp_buffer = "";
+var g_current_symbol = "";
+var g_current_symbol_position = new point(-1, -1);
 var g_cursor_position = new point(0, 0);
 var g_cursor_visible = true;
 var g_cursor_interval;
 var g_cursor_size = new point(0, 0);
 var g_letter_spacing;
-var g_selection_start = new point(-1, -1);
-var g_selection_end = new point(-1, -1);
+var g_reading_math_symbol = false;
 var g_canvas;
 var g_ctx;
+
+function is_valid_symbol(symbol) {
+    return valid_math_symbols[symbol] != undefined;
+}
 
 function clamp(val, min, max) {
     return Math.min(Math.max(val, min), max);
@@ -105,7 +133,7 @@ function clamp(val, min, max) {
 
 function set_cursor_position(x, y) {
     y = clamp(y, 0, g_text_buffer.length-1);
-    x = clamp(x, 0, g_text_buffer[y].length());
+    x = clamp(x, 0, g_text_buffer[y].char_length());
 
     g_cursor_position.x = x;
     g_cursor_position.y = y;
@@ -115,7 +143,7 @@ function set_cursor_position(x, y) {
 
 function increment_cursor_position(x, y) {
     y = clamp(y, -g_cursor_position.y, g_text_buffer.length-1 - g_cursor_position.y);
-    x = clamp(x, -g_cursor_position.x, g_text_buffer[g_cursor_position.y + y].length() - g_cursor_position.x);
+    x = clamp(x, -g_cursor_position.x, g_text_buffer[g_cursor_position.y + y].char_length() - g_cursor_position.x);
 
     g_cursor_position.x += x;
     g_cursor_position.y += y;
@@ -468,8 +496,6 @@ function write_key(key, append_to_buffer) {
             g_ctx.fillText(key, get_cursor_x_in_pixels(), get_cursor_y_in_pixels());
             if (append_to_buffer) {
                 if (something_is_selected()) {
-                    var selection_position = position_of_first_selected_letter();
-                    set_cursor_position(selection_position.x, selection_position.y);
                     delete_selected();
                 }
                 insert_letter_at_cursor(key);
@@ -482,8 +508,8 @@ function write_key(key, append_to_buffer) {
 }
 
 function load() {
-    document.querySelector("#editor").width = window.innerWidth - (window.innerWidth/10);   // Set the width of the canvas to the width of the window - 10%
-    document.querySelector("#editor").height = window.innerHeight-(window.innerHeight/10);  // Same with the height
+    document.querySelector("#editor").width = window.innerWidth;   // Set the width of the canvas to the width of the window
+    document.querySelector("#editor").height = window.innerHeight;  // Same with the height
     g_canvas = document.getElementById("editor");
     g_ctx = g_canvas.getContext('2d');
 
@@ -495,6 +521,7 @@ function load() {
 
     g_ctx.font = font_size + "px " + font_name;
     g_ctx.fillStyle = text_color;
+    g_ctx.strokeStyle = text_color
     g_ctx.imageSmoothingEnabled = false;
     g_ctx.textAlign = "center";
 
