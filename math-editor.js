@@ -332,31 +332,37 @@ function mouse_click_listener(e) {
 }
 
 
-
-function key_pressed(key, append_to_buffer) {
-    if (key.ctrlKey) {
-        switch(key.key) {
-            case 'a':
-                g_selection_start.x = 0;
-                g_selection_start.y = 0;
-                g_selection_end.x = g_text_buffer[g_text_buffer.length-1].length()-1; /// FIXME: We should find the max row width instead 
-                g_selection_end.y = g_text_buffer.length-1;
-                reload_buffer();
-                break;
-        }
-        return;
+function control_key_pressed(key) {
+    switch(key.key) {
+        case 'a':
+            g_selection_start.x = 0;
+            g_selection_start.y = 0;
+            g_selection_end.x = g_text_buffer[g_text_buffer.length-1].length()-1; /// FIXME: We should find the max row width instead 
+            g_selection_end.y = g_text_buffer.length-1;
+            reload_buffer();
+            break;
     }
-    
+}
 
+function draw_math_symbol(symbol, row, column) {
+    symbol = symbol.substring(1).toLowerCase(); // Remove the backslash and ensure it's lowercase.
 
-    if (key.key.length != 1 && key.key.startsWith("F")) { // Ignore function keys
-        return;
+    if (is_valid_symbol(symbol)) {
+        valid_math_symbols[symbol].draw(row, column);
     }
-    if (key.key.startsWith("Arrow")) {
-        if (!key.shiftKey) {
-            deselect_text();
+    else {
+        for (var i = 0; i < symbol.length; i++) {
+            write_key(symbol[i]);
         }
-        if (key.key == 'ArrowRight') {
+    }
+}
+
+function arrow_key_pressed(key) {
+    if (!key.shiftKey) {
+        deselect_text();
+    }
+    switch (key.key) {
+        case "ArrowRight":
             if (key.shiftKey) {
                 if (!something_is_selected()) {
                     g_text_buffer[g_cursor_position.y].selection.start = g_cursor_position.x;
@@ -372,8 +378,8 @@ function key_pressed(key, append_to_buffer) {
             else {
                 increment_cursor_position(1, 0);
             }
-        }
-        else if (key.key == 'ArrowLeft') {
+            break;
+        case "ArrowLeft":
             if (key.shiftKey) {
                 if (!something_is_selected()) {
                     g_text_buffer[g_cursor_position.y].selection.start = g_cursor_position.x;
@@ -389,8 +395,8 @@ function key_pressed(key, append_to_buffer) {
             else {
                 increment_cursor_position(-1, 0);
             }
-        }
-        else if (key.key == 'ArrowUp') {
+            break;
+        case "ArrowUp":
             if (key.shiftKey) {
                 if (g_cursor_position.y != 0) {
                     if (!something_is_selected()) {
@@ -408,8 +414,8 @@ function key_pressed(key, append_to_buffer) {
             else {
                 increment_cursor_position(0, -1);
             }
-        }
-        else if (key.key == 'ArrowDown') {
+            break;
+        case "ArrowDown":
             if (key.shiftKey) {
                 if (g_cursor_position.y != g_text_buffer.length - 1) {
                     if (!something_is_selected()) {
