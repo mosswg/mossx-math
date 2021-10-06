@@ -221,6 +221,9 @@ class math_symbol {
             if (g_tmp_buffer === "{") {
                 g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 1);
                 reload_buffer();
+                g_current_symbol = "";
+                g_tmp_buffer = "";
+                g_reading_math_symbol = false;
             }
             cursor_x-=2;
             g_tmp_buffer = g_tmp_buffer.substring(0, g_tmp_buffer.length-1);
