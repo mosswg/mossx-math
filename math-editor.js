@@ -213,13 +213,17 @@ class math_symbol {
         var cursor_x = g_cursor_position.x + 1;
         g_cursor_position.x = g_current_symbol_position.x;
         write_key('√', false);
-        if (g_tmp_buffer == "") {
+        if (g_tmp_buffer === "") {
             g_tmp_buffer = "{"
             return;
         }      
         if (key == "Backspace") {
-            cursor_x -= 2;
-            g_tmp_buffer = g_tmp_buffer.substring(0, g_tmp_buffer.length-2);
+            if (g_tmp_buffer === "{") {
+                g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 1);
+                reload_buffer();
+            }
+            cursor_x-=2;
+            g_tmp_buffer = g_tmp_buffer.substring(0, g_tmp_buffer.length-1);
         }
         else {
             g_tmp_buffer += key;
