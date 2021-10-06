@@ -103,6 +103,141 @@ class line {
         }
         this.deselect_text();
     }
+
+
+    remove_char_at(idx) {
+        var curr = 0;
+        for (var i = 0; i < this.char_length(); curr++) {
+            console.log(curr);
+            if (idx < this.text[curr].length + i) {
+                this.text[curr] = this.text[curr].substring(0, idx - curr) + this.text[i].substring(idx - curr + 1);
+                break;
+            }
+            else {
+                i += this.text[i].length;
+            }
+        }
+    }
+}
+
+class math_symbol {
+    constructor(construct, draw) {
+        this.construct = construct;
+        this.draw = draw;
+    }
+
+
+
+    static draw_sqrt(row, column) {
+        if (!(g_text_buffer[row].text[column+1].startsWith('{'))) {
+            write_key('√');
+            g_ctx.beginPath();
+            g_ctx.moveTo(cursor_x_to_pixels(column), cursor_y_to_pixels(row) + max_height); // Draw the covering line
+            g_ctx.lineTo(cursor_x_to_pixels(column+1), cursor_y_to_pixels(row) + max_height);
+            g_ctx.stroke();
+            if (!is_valid_symbol(g_text_buffer[row].text[column+1])) {
+                write_key(g_text_buffer[row].text[column+1]);
+            }
+            else {
+                valid_math_symbols[g_text_buffer[row].text[column+1]]();
+            }
+        }
+        else {
+            write_key('√');            
+            if (g_text_buffer[row].text[column+1].length === 1) { // if pasted from a separate source they will be single characters whereas from us they will be in string format
+                var num_curly = 1;
+                var end_curly = -1;
+                for (i = column+2; i < g_text_buffer[row].length(); i++) {
+                    if (g_text_buffer[row].text[i] === '{') {
+                        num_curly++;
+                    }
+                    else if (g_text_buffer[row].text[i] === '}') {
+                        num_curly--;
+                    }
+    
+                    if (num_curly === 0) { 
+                        end = i;
+                    }
+                }
+                if (end === -1) {
+                    console.error("Error: Missing End Curly Bracket");
+                    return;
+                }
+                g_ctx.beginPath();
+                g_ctx.moveTo(cursor_x_to_pixels(column) + g_ctx.measureText('√').width/2, cursor_y_to_pixels(row) - max_height); // Draw the covering line
+                g_ctx.lineTo(cursor_x_to_pixels(end_curly) + g_ctx.measureText('√').width/2, cursor_y_to_pixels(row) - max_height);
+                g_ctx.stroke();
+                
+                for (var i = column+2; i < end_curly; i++) {
+                    write_key(g_text_buffer[row].text[i], false);
+                }
+            }
+            else {
+                g_ctx.beginPath();
+                g_ctx.moveTo(cursor_x_to_pixels(column) + g_ctx.measureText('√').width/2, cursor_y_to_pixels(row) - max_height); // Draw the covering line
+                g_ctx.lineTo(cursor_x_to_pixels(column + g_text_buffer[row].text[column+1].length-2) + g_ctx.measureText('√').width/2, cursor_y_to_pixels(row) - max_height);
+                g_ctx.closePath();
+                g_ctx.stroke();             
+                for (var i = 1; i < g_text_buffer[row].text[column+1].length-1; i++) {
+                    write_key(g_text_buffer[row].text[column+1].charAt(i), false);
+                }
+            }
+            
+        }
+    }
+
+    static create_sqrt(key) {
+        reload_buffer();
+        var cursor_x = g_cursor_position.x + 1;
+        g_cursor_position.x = g_current_symbol_position.x;
+        write_key('√', false);
+        if (g_tmp_buffer == "") {
+            g_tmp_buffer = "{"
+            return;
+        }      
+        if (key == "Backspace") {
+            cursor_x -= 2;
+            g_tmp_buffer = g_tmp_buffer.substring(0, g_tmp_buffer.length-2);
+        }
+        else {
+            g_tmp_buffer += key;
+        }
+        g_ctx.beginPath();
+        g_ctx.moveTo(cursor_x_to_pixels(g_current_symbol_position.x) + g_ctx.measureText('√').width/2, get_cursor_y_in_pixels() - max_height); // Draw the covering line
+        g_ctx.lineTo(cursor_x_to_pixels(g_current_symbol_position.x + g_tmp_buffer.length-1) + g_ctx.measureText('√').width/2, get_cursor_y_in_pixels() - max_height);
+        g_ctx.closePath();
+        g_ctx.stroke();
+
+        for (var i = 1; i < g_tmp_buffer.length; i++) {
+            write_key(g_tmp_buffer[i], false);
+        }
+        g_cursor_position.x = cursor_x;
+    }
+
+    static draw_nrt(row, column) {
+        if (g_text_buffer[row].text[column+1] !== '{') {
+            draw_sqrt(row, column);
+        }
+        else {
+            
+        }
+    }
+
+    static create_math_symbol(symbol, key) {
+        valid_math_symbols[symbol].construct(key.key);
+    }
+}
+
+const valid_math_symbols = {
+    "sqrt" : new math_symbol(math_symbol.create_sqrt, math_symbol.draw_sqrt),
+    "nrt" : new math_symbol(math_symbol.create_nrt, math_symbol.draw_nrt)
+}
+
+function finish_math_symbol() {
+    g_current_symbol = "".concat(g_tmp_buffer); // Copy the contents instead of storing a reference to the variable
+    g_tmp_buffer = "";
+    g_cursor_position.x -= g_current_symbol.length-1;
+    valid_math_symbols[g_current_symbol].construct("");
 }
 
 
@@ -432,14 +567,87 @@ function arrow_key_pressed(key) {
             else {
                 increment_cursor_position(0, 1);
             }
+            
+    }
+}
+
+
+function key_pressed(key, append_to_buffer) {
+    if (g_reading_math_symbol) {
+        if (g_current_symbol !== "") { // After symbol type is chosen
+            if (key.key === "Tab" || key.key === "Enter") {
+                g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, "\\" + g_current_symbol);
+                g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 0, "");
+                for (var i = 0; i < g_tmp_buffer.length; i++) {
+                    g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += g_tmp_buffer[i];
+                }
+                g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += '}';
+                g_current_symbol = "";
+                g_tmp_buffer = "";
+                g_reading_math_symbol = false;
+                reload_buffer();
+            }
+            else  {
+                math_symbol.create_math_symbol(g_current_symbol, key);
+            }
         }
+        else { // Read symbol type
+            if (key.key === "Backspace") {
+                g_tmp_buffer = g_tmp_buffer.substring(0, g_tmp_buffer.length-2); // Remove last element
+                reload_buffer();
+                return;
+            }
+
+
+            g_tmp_buffer = g_tmp_buffer.concat(key.key);
+            if (is_valid_symbol(g_tmp_buffer)) {
+                finish_math_symbol(g_tmp_buffer);
+            }
+            else if (key.key === " ") { // If it's not a supported symbol write as plain text
+                for (var i = 0; i < g_tmp_buffer.length; i++) {
+                    g_text_buffer[g_cursor_position.y].text.splice(g_cursor_position.x - g_tmp_buffer.length + i, 0, g_tmp_buffer[i]); 
+                }
+                g_tmp_buffer = "";
+            }
+            else {
+                // Draw the keys without storing them.
+                g_cursor_position.x = g_current_symbol_position.x;
+                reload_buffer();
+                for (var i = 0; i < g_tmp_buffer.length; i++) {
+                    write_key(g_tmp_buffer.charAt(i), false);
+                }
+            }
+        }
+    }
+    else if (key.ctrlKey) {
+        control_key_pressed(key);
+        return;
+    } 
+    else if (key.key.length != 1 && key.key.startsWith("F")) { // Ignore function keys
+        return;
+    }
+    else if (key.key == "\\") {
+        g_reading_math_symbol = true;
+        g_current_symbol_position.x = g_cursor_position.x;
+        g_current_symbol_position.y = g_cursor_position.y;
+    }
+    else if (key.key.startsWith("Arrow")) {
+        arrow_key_pressed(key);
     }
     else {
         write_key(key.key, append_to_buffer);
     }
 }
 
+
 function write_key(key, append_to_buffer) {
+    if (key.length !== 1 && key.startsWith('\\')) {
+        draw_math_symbol(key, g_cursor_position.y, g_cursor_position.x);
+        return;
+    }
+    else if (key.startsWith('{')) {
+        return;
+    }
     switch (key) {
         case "Enter":
             if (append_to_buffer) {
@@ -471,7 +679,7 @@ function write_key(key, append_to_buffer) {
                     set_cursor_position(previous_line_length, g_cursor_position.y - 1);
                 }
                 else {
-                    g_text_buffer[g_cursor_position.y].text.splice(g_cursor_position.x-1, 1);
+                    g_text_buffer[g_cursor_position.y].remove_char_at(g_cursor_position.x);
                     increment_cursor_position(-1, 0);
                 }
             }
