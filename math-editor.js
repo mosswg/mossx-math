@@ -98,11 +98,22 @@ class line {
     }
 
     /**
+     * If index is undefined it will return if anything in the entire line is selected.
      * 
+     * @param {number} index The index to be check. Can be undefined.
      * @returns {boolean} Whether any of the text is selected.
      */
-    is_selected() {
-        return this.selection.start !== -1 && this.selection.end !== -1;
+    is_selected(index) {
+        if (index === undefined) {
+            return this.selection.start !== -1 && this.selection.end !== -1;
+        }
+
+        if (index >= this.char_length()) return false;
+
+        var start = Math.min(this.selection.start, this.selection.end);
+        var end = Math.max(this.selection.start, this.selection.end);
+
+        return index >= start && index <= end;
     }
 
     /**
@@ -158,7 +169,20 @@ class line {
         
     }
 
-
+    get_modified_length(index) {
+        if (is_valid_symbol(this.text[index])) {
+            return 1;
+        }
+        
+        if (text.startsWith("{")) {
+            if (this.text[index-1].startsWith("{")) {
+                return 0;
+            }
+            return this.text[index].length - 2;
+        }
+        
+        return this.text[index].length;
+    }
 
     /**
      * @param {String} text The text whose length will be gotten.
@@ -672,7 +696,7 @@ function reload_buffer() {
     g_cursor_position.y = pushed_cursor_position_y;
     set_cursor_scale(pushed_cursor_scale_x, pushed_cursor_scale_y);
 
-    // Draw Text Selection
+    // Draw Text  Selection
     if (something_is_selected()) {
         var start;
         var end;
