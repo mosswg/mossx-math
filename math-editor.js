@@ -239,15 +239,24 @@ class math_symbol {
     }
 
     static create_sqrt(key) {
+        if (key.key == "Enter" || key.key == "Tab") { // Check if we should stop creating the sqrt
+            g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, "\\" + g_current_symbol);
+            g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 0, "");
+            for (var i = 0; i < g_tmp_buffer.length; i++) {
+                g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += g_tmp_buffer[i];
+            }
+            g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += '}';
+            return false;
+        }
         reload_buffer();
         var cursor_x = g_cursor_position.x + 1;
         g_cursor_position.x = g_current_symbol_position.x;
-        write_key('√', false);
+        write_text('√', false);
         if (g_tmp_buffer === "") {
             g_tmp_buffer = "{"
-            return;
+            return true;
         }      
-        if (key == "Backspace") {
+        if (key.key == "Backspace") {
             if (g_tmp_buffer === "{") {
                 g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 1);
                 reload_buffer();
@@ -259,7 +268,7 @@ class math_symbol {
             g_tmp_buffer = g_tmp_buffer.substring(0, g_tmp_buffer.length-1);
         }
         else {
-            g_tmp_buffer += key;
+            g_tmp_buffer += key.key;
         }
         g_ctx.beginPath();
         g_ctx.moveTo(cursor_x_to_pixels(g_current_symbol_position.x) + g_ctx.measureText('√').width/2, get_cursor_y_in_pixels() - max_height); // Draw the covering line
@@ -520,8 +529,8 @@ function reload_buffer() {
         
         for (var i = 0; i < g_text_buffer.length; i++) { /// TODO: Optimize this
             if (g_text_buffer[i].is_selected) {
-                start = clamp(Math.min(g_text_buffer[i].selection.start, g_text_buffer[i].selection.end), 0, g_text_buffer[i].length());
-                end = clamp(Math.max(g_text_buffer[i].selection.start, g_text_buffer[i].selection.end), 0, g_text_buffer[i].length());
+                start = clamp(Math.min(g_text_buffer[i].selection.start, g_text_buffer[i].selection.end), 0, g_text_buffer[i].char_length());
+                end = clamp(Math.max(g_text_buffer[i].selection.start, g_text_buffer[i].selection.end), 0, g_text_buffer[i].char_length());
                 draw_selection(start, end, i);
             }
         }
