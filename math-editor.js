@@ -302,10 +302,10 @@ class math_symbol {
         reload_buffer();
         var pushed_cursor_position_x = g_cursor_position.x;
         if (!g_tmp_buffer.startsWith("{")) {
+            scale_cursor(1, .5);
             g_tmp_buffer = "{";
             return true;
         }
-        scale_cursor(1, .5);
 
         if (g_tmp_buffer.indexOf('}') !== -1) { // If the first part of the fraction is complete
             var numerator_length = g_tmp_buffer.indexOf("}") + 1;
@@ -328,6 +328,7 @@ class math_symbol {
                     g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 2] += g_tmp_buffer[i + numerator_length];
                 }
                 g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 2] += '}';
+                g_cursor_position.x = g_current_symbol_position.x + length;
                 return false;
             }
             g_cursor_position.y-=.5;
@@ -337,6 +338,7 @@ class math_symbol {
             g_ctx.lineTo(cursor_x_to_pixels(g_current_symbol_position.x-.5 + length), get_cursor_y_in_pixels() + g_ctx.measureText(key).actualBoundingBoxAscent/2);
             g_ctx.closePath();
             g_ctx.stroke();
+            g_cursor_position.x = g_current_symbol_position.x;
             for (var i = 0; i < g_tmp_buffer.length; i++) {
                 if (g_tmp_buffer[i] === '}') {
                     g_cursor_position.y++;
@@ -350,13 +352,11 @@ class math_symbol {
             if (is_text_key(key))
                 write_text(key.key, false);
             g_cursor_position.y-=.5;
-            g_cursor_position.x = pushed_cursor_position_x;
         }
         else {
             if (key.key === "ArrowDown" || key.key === "Enter") {
                 g_tmp_buffer += "}";
                 increment_cursor_position(0, -1);
-                scale_cursor(1, 2);
                 return math_symbol.create_frac(key);
             }
             g_cursor_position.y-=.5;
@@ -365,18 +365,16 @@ class math_symbol {
             g_ctx.lineTo(cursor_x_to_pixels(g_current_symbol_position.x-.5 + g_tmp_buffer.length), get_cursor_y_in_pixels() + g_ctx.measureText(key).actualBoundingBoxAscent/2);
             g_ctx.closePath();
             g_ctx.stroke();
+            g_cursor_position.x = g_current_symbol_position.x;
             for (var i = 0; i < g_tmp_buffer.length; i++) {
                 write_text(g_tmp_buffer[i], false);
             }
             if (is_text_key(key))
                 write_text(key.key, false);
             g_cursor_position.y+=.5;
-            
-            g_cursor_position.x = pushed_cursor_position_x;
         }
         if (is_text_key(key))
             g_tmp_buffer += key.key;
-        scale_cursor(1, 2);
         return true;
     }
 
@@ -635,6 +633,20 @@ function scale_cursor(x, y) {
 
 
 /**
+ * Sets the scale of the cursor and text. \
+ * 1 is the default scale of everything.
+ * 
+ * @param {number} x 
+ * @param {number} y 
+ */
+ function set_cursor_scale(x, y) {
+    g_cursor_scale.x = x;
+    g_cursor_scale.y = y;
+    g_ctx.font = (font_size*Math.min(x, y)) + "px " + font_name;
+}
+
+
+/**
  * Draws the contents of g_text_buffer and the selected area to the g_ctx canvas.
  * 
  * TODO: Optimize for reloading single lines instead of the entire buffer.
@@ -642,9 +654,11 @@ function scale_cursor(x, y) {
 function reload_buffer() {
     const pushed_cursor_position_x = g_cursor_position.x;
     const pushed_cursor_position_y = g_cursor_position.y;
-    g_cursor_position.x = 0, g_cursor_position.y = 0;
+    const pushed_cursor_scale_x = g_cursor_scale.x;
+    const pushed_cursor_scale_y = g_cursor_scale.y;
+    g_cursor_position.x = 0, g_cursor_position.y = 0, set_cursor_scale(1, 1);
 
-    // Write key presses to the canvas.
+    // Write text to the canvas.
     g_ctx.clearRect(0, 0, window.innerWidth*2, window.innerHeight*2); // Clear the canvas
     for (var i = 0; i < g_text_buffer.length; i++) {
         for (var j = 0; j < g_text_buffer[i].length(); j++) {
@@ -656,13 +670,14 @@ function reload_buffer() {
 
     g_cursor_position.x = pushed_cursor_position_x;
     g_cursor_position.y = pushed_cursor_position_y;
+    set_cursor_scale(pushed_cursor_scale_x, pushed_cursor_scale_y);
 
-    // Highlight Selected Text
+    // Draw Text Selection
     if (something_is_selected()) {
         var start;
         var end;
         
-        for (var i = 0; i < g_text_buffer.length; i++) { /// TODO: Optimize this
+        for (var i = 0; i < g_text_buffer.length; i++) {
             if (g_text_buffer[i].is_selected) {
                 start = clamp(Math.min(g_text_buffer[i].selection.start, g_text_buffer[i].selection.end), 0, g_text_buffer[i].char_length());
                 end = clamp(Math.max(g_text_buffer[i].selection.start, g_text_buffer[i].selection.end), 0, g_text_buffer[i].char_length());
@@ -947,6 +962,9 @@ function key_pressed(key, append_to_buffer) {
     }
     if (g_state === states.create_symbol) {
         create_math_symbol(key);
+    }
+    else if (g_state === states.edit_symbol) {
+        edit_math_symbol(key);
     }
     else if (!is_text_key(key)) {
         navigate(key);
