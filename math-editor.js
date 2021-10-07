@@ -50,10 +50,15 @@ class line {
         var length = 0;
         for (var i = 0; i < this.text.length; i++) {
             if (this.text[i].startsWith('\\')) {
+                if (this.text[i] === "\\frac") {
+                    length += Math.max(this.text[i+1].length, this.text[i+2].length)-2;
+                    i+=2;
+                    continue;
+                }
                 length++;
             }
             else {
-            length += this.text[i].length;
+                length += this.text[i].length;
             }
 
             if (this.text[i].length !== 1 && this.text[i].startsWith('{')) {
@@ -292,6 +297,116 @@ class math_symbol {
         }
     }
 
+
+    static create_frac(key) {
+        reload_buffer();
+        var pushed_cursor_position_x = g_cursor_position.x;
+        if (!g_tmp_buffer.startsWith("{")) {
+            g_tmp_buffer = "{";
+            return true;
+        }
+        scale_cursor(1, .5);
+
+        if (g_tmp_buffer.indexOf('}') !== -1) { // If the first part of the fraction is complete
+            var numerator_length = g_tmp_buffer.indexOf("}") + 1;
+            var length = Math.max(numerator_length-2, (g_tmp_buffer.length-2) - (numerator_length-2));
+            var numerator_off = Math.max(0, (g_tmp_buffer.length/2) - (numerator_length-1));
+            var denom_off = Math.max(0, (numerator_length-1) - (g_tmp_buffer.length/2));
+            if (g_tmp_buffer.endsWith("}")) {
+                g_tmp_buffer += "{";
+            }
+            if (key.key === "Enter" || key.key === "Tab") {
+                scale_cursor(1, 2);
+                increment_cursor_position(1, 0);
+                g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, "\\" + g_current_symbol);
+                g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 0, "");
+                for (var i = 0; i < numerator_length; i++) {
+                    g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += g_tmp_buffer[i];
+                }
+                g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 2, 0, "");
+                for (var i = 0; i < g_tmp_buffer.length - numerator_length; i++) {
+                    g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 2] += g_tmp_buffer[i + numerator_length];
+                }
+                g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 2] += '}';
+                return false;
+            }
+            g_cursor_position.y-=.5;
+            g_cursor_position.x += numerator_off;        
+            g_ctx.beginPath();
+            g_ctx.moveTo(cursor_x_to_pixels(g_current_symbol_position.x-1), get_cursor_y_in_pixels() + g_ctx.measureText(key).actualBoundingBoxAscent/2); // Draw the covering line
+            g_ctx.lineTo(cursor_x_to_pixels(g_current_symbol_position.x-.5 + length), get_cursor_y_in_pixels() + g_ctx.measureText(key).actualBoundingBoxAscent/2);
+            g_ctx.closePath();
+            g_ctx.stroke();
+            for (var i = 0; i < g_tmp_buffer.length; i++) {
+                if (g_tmp_buffer[i] === '}') {
+                    g_cursor_position.y++;
+                    g_cursor_position.x -= (i-1) + numerator_off;
+                    g_cursor_position.x += denom_off;
+                    i++;
+                    continue;
+                }
+                write_text(g_tmp_buffer[i], false);
+            }
+            if (is_text_key(key))
+                write_text(key.key, false);
+            g_cursor_position.y-=.5;
+            g_cursor_position.x = pushed_cursor_position_x;
+        }
+        else {
+            if (key.key === "ArrowDown" || key.key === "Enter") {
+                g_tmp_buffer += "}";
+                increment_cursor_position(0, -1);
+                scale_cursor(1, 2);
+                return math_symbol.create_frac(key);
+            }
+            g_cursor_position.y-=.5;
+            g_ctx.beginPath();
+            g_ctx.moveTo(cursor_x_to_pixels(g_current_symbol_position.x-1), get_cursor_y_in_pixels() + g_ctx.measureText(key).actualBoundingBoxAscent/2); // Draw the covering line
+            g_ctx.lineTo(cursor_x_to_pixels(g_current_symbol_position.x-.5 + g_tmp_buffer.length), get_cursor_y_in_pixels() + g_ctx.measureText(key).actualBoundingBoxAscent/2);
+            g_ctx.closePath();
+            g_ctx.stroke();
+            for (var i = 0; i < g_tmp_buffer.length; i++) {
+                write_text(g_tmp_buffer[i], false);
+            }
+            if (is_text_key(key))
+                write_text(key.key, false);
+            g_cursor_position.y+=.5;
+            
+            g_cursor_position.x = pushed_cursor_position_x;
+        }
+        if (is_text_key(key))
+            g_tmp_buffer += key.key;
+        scale_cursor(1, 2);
+        return true;
+    }
+
+    static draw_frac(row, column) {
+        scale_cursor(1, .5);
+        var tot_length = g_text_buffer[row].text[column+1].length + g_text_buffer[row].text[column+2].length;
+        var drawn_length = Math.max(g_text_buffer[row].text[column+1].length, g_text_buffer[row].text[column+2].length)-2;
+        var numerator_off = Math.max(0, (tot_length/2) - (g_text_buffer[row].text[column+1].length));
+        var denom_off = Math.max(0, (g_text_buffer[row].text[column+1].length) - (tot_length/2));
+        g_cursor_position.y-=.5;
+        g_cursor_position.x += numerator_off;
+        g_ctx.beginPath();
+        g_ctx.moveTo(cursor_x_to_pixels(g_current_symbol_position.x-1), get_cursor_y_in_pixels() + g_ctx.measureText('1').actualBoundingBoxAscent/2); // Draw the covering line
+        g_ctx.lineTo(cursor_x_to_pixels(g_current_symbol_position.x-.5 + drawn_length), get_cursor_y_in_pixels() + g_ctx.measureText('1').actualBoundingBoxAscent/2);
+        g_ctx.closePath();
+        g_ctx.stroke();
+        for (var i = 1; i < g_text_buffer[row].text[column+1].length-1; i++) {
+            write_text(g_text_buffer[row].text[column+1].charAt(i), false);
+        }
+        g_cursor_position.y++;
+        g_cursor_position.x -= (g_text_buffer[row].text[column+1].length - 2) + numerator_off;
+        g_cursor_position.x += denom_off;
+        for (var i = 1; i < g_text_buffer[row].text[column+2].length-1; i++) {
+            write_text(g_text_buffer[row].text[column+2].charAt(i), false);
+        }
+        g_cursor_position.x++;
+        g_cursor_position.y-=.5;
+        scale_cursor(1, 2);
+    }
+
     static create_pi() {
         g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, "\\" + g_current_symbol);
         g_cursor_position.x++;
@@ -320,6 +435,7 @@ class math_symbol {
 const valid_math_symbols = {
     "sqrt" : new math_symbol(math_symbol.create_sqrt, math_symbol.draw_sqrt),
     "nrt" : new math_symbol(math_symbol.create_nrt, math_symbol.draw_nrt),
+    "frac": new math_symbol(math_symbol.create_frac, math_symbol.draw_frac),
     "pi": new math_symbol(math_symbol.create_pi, math_symbol.draw_pi),
     "theta": new math_symbol(math_symbol.create_theta, math_symbol.draw_theta)
 }
@@ -343,6 +459,7 @@ var g_current_symbol_position = new point(-1, -1);
 var g_cursor_position = new point(0, 0);
 var g_cursor_visible = true;
 var g_cursor_interval;
+var g_cursor_scale = new point(1, 1);
 var g_cursor_size = new point(0, 0);
 var g_letter_spacing;
 var g_state = states.text;
@@ -391,11 +508,11 @@ function update_cursor() {
 function draw_cursor() {
     if (g_cursor_visible) {
         g_ctx.beginPath();
-        g_ctx.rect(get_cursor_x_in_pixels() - (g_letter_spacing/2 + g_cursor_size.x), get_cursor_y_in_pixels() - g_cursor_size.y, g_cursor_size.x, g_cursor_size.y);
+        g_ctx.rect(get_cursor_x_in_pixels() - (g_letter_spacing/2 + g_cursor_size.x), get_cursor_y_in_pixels() - g_cursor_size.y, g_cursor_size.x* g_cursor_scale.x, g_cursor_size.y* g_cursor_scale.y);
         g_ctx.fill();
     }
     else {
-        g_ctx.clearRect(get_cursor_x_in_pixels() - (g_letter_spacing/2 + g_cursor_size.x), get_cursor_y_in_pixels() - g_cursor_size.y, g_cursor_size.x, g_cursor_size.y);
+        g_ctx.clearRect(get_cursor_x_in_pixels() - (g_letter_spacing/2 + g_cursor_size.x), get_cursor_y_in_pixels() - g_cursor_size.y, g_cursor_size.x* g_cursor_scale.x, g_cursor_size.y * g_cursor_scale.y);
     }
 
     g_cursor_visible = !g_cursor_visible;
@@ -503,7 +620,25 @@ function position_of_first_selected_letter() {
     return undefined;
 }
 
-/// TODO: Optimize for reloading single lines instead of the entire buffer.
+/**
+ * Scales the scale of the cursor and text. \
+ * 1 is the default scale of everything.
+ * 
+ * @param {number} x 
+ * @param {number} y 
+ */
+function scale_cursor(x, y) {
+    g_cursor_scale.x *= x;
+    g_cursor_scale.y *= y;
+    g_ctx.font = (font_size*Math.min(g_cursor_scale.x, g_cursor_scale.y)) + "px " + font_name;
+}
+
+
+/**
+ * Draws the contents of g_text_buffer and the selected area to the g_ctx canvas.
+ * 
+ * TODO: Optimize for reloading single lines instead of the entire buffer.
+ */
 function reload_buffer() {
     const pushed_cursor_position_x = g_cursor_position.x;
     const pushed_cursor_position_y = g_cursor_position.y;
@@ -640,21 +775,15 @@ function navigate(key) {
     else {
         switch (key.key) {
             case "Enter":
-                if (append_to_buffer) {
-                    g_text_buffer.splice(g_cursor_position.y + 1, 0, new line());
-                    var next_line_length = g_text_buffer[g_cursor_position.y + 1].length();
-                    if (g_cursor_position.x !== g_text_buffer[g_cursor_position.y].length()-1) {   // If the cursor is not at the end of the buffer move everything after 
-                                                                            // the cursor to the new line.
-                        var after_newline = g_text_buffer[g_cursor_position.y].text.slice(g_cursor_position.x);
-                        g_text_buffer[g_cursor_position.y + 1].text.push.apply(g_text_buffer[g_cursor_position.y + 1].text, after_newline);
-                        g_text_buffer[g_cursor_position.y].text.splice(g_cursor_position.x, after_newline.length);
-                    }
-                    set_cursor_position(next_line_length, g_cursor_position.y + 1);
+                g_text_buffer.splice(g_cursor_position.y + 1, 0, new line());
+                var next_line_length = g_text_buffer[g_cursor_position.y + 1].length();
+                if (g_cursor_position.x !== g_text_buffer[g_cursor_position.y].length()-1) {   // If the cursor is not at the end of the buffer move everything after 
+                                                                        // the cursor to the new line.
+                    var after_newline = g_text_buffer[g_cursor_position.y].text.slice(g_cursor_position.x);
+                    g_text_buffer[g_cursor_position.y + 1].text.push.apply(g_text_buffer[g_cursor_position.y + 1].text, after_newline);
+                    g_text_buffer[g_cursor_position.y].text.splice(g_cursor_position.x, after_newline.length);
                 }
-                else {
-                    g_cursor_position.y++;
-                    g_cursor_position.x = 0;
-                }
+                set_cursor_position(next_line_length, g_cursor_position.y + 1);
                 return;
             case "Backspace":
                 if (something_is_selected()) {
@@ -800,7 +929,7 @@ function arrow_key_pressed(key) {
 
 
 function key_pressed(key, append_to_buffer) {
-    if (g_text_buffer[g_cursor_position.y].is_symbol(g_cursor_position.x)) {
+    if (g_state === states.create_symbol && g_current_symbol === "" && g_text_buffer[g_cursor_position.y].is_symbol(g_cursor_position.x)) {
         g_state = states.edit_symbol;
         g_current_symbol_position.x = g_cursor_position.x;
         g_current_symbol_position.y = g_cursor_position.y;
@@ -810,13 +939,18 @@ function key_pressed(key, append_to_buffer) {
         g_current_symbol_position.x = g_cursor_position.x;
         g_current_symbol_position.y = g_cursor_position.y;
     }
-
+    else if (key.key === "/") {
+        g_state = states.create_symbol;
+        g_current_symbol_position.x = g_cursor_position.x;
+        g_current_symbol_position.y = g_cursor_position.y;
+        g_current_symbol = "frac";
+    }
     if (g_state === states.create_symbol) {
         create_math_symbol(key);
     }
     else if (!is_text_key(key)) {
-        g_state = states.navigation;
         navigate(key);
+        g_state = states.navigation;
         return;
     }
     else {
