@@ -208,6 +208,50 @@ class math_symbol {
     }
 
 
+    static create_sqrt(key) {
+        if (key.key == "Enter" || key.key == "Tab") { // Check if we should stop creating the sqrt
+            g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, "\\" + g_current_symbol);
+            g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 0, "");
+            for (var i = 0; i < g_tmp_buffer.length; i++) {
+                g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += g_tmp_buffer[i];
+            }
+            g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += '}';
+            return false;
+        }
+        reload_buffer();
+        var cursor_x = g_cursor_position.x + 1;
+        g_cursor_position.x = g_current_symbol_position.x;
+        write_text('√', false);
+        if (g_tmp_buffer === "") {
+            g_tmp_buffer = "{"
+            return true;
+        }      
+        if (key.key == "Backspace") {
+            if (g_tmp_buffer === "{") {
+                g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 1);
+                reload_buffer();
+                g_current_symbol = "";
+                g_tmp_buffer = "";
+                g_reading_math_symbol = false;
+            }
+            cursor_x-=2;
+            g_tmp_buffer = g_tmp_buffer.substring(0, g_tmp_buffer.length-1);
+        }
+        else {
+            g_tmp_buffer += key.key;
+        }
+        g_ctx.beginPath();
+        g_ctx.moveTo(cursor_x_to_pixels(g_current_symbol_position.x) + g_ctx.measureText('√').width/2, get_cursor_y_in_pixels() - max_height); // Draw the covering line
+        g_ctx.lineTo(cursor_x_to_pixels(g_current_symbol_position.x + g_tmp_buffer.length-1) + g_ctx.measureText('√').width/2, get_cursor_y_in_pixels() - max_height);
+        g_ctx.closePath();
+        g_ctx.stroke();
+
+        for (var i = 1; i < g_tmp_buffer.length; i++) {
+            write_text(g_tmp_buffer[i], false);
+        }
+        g_cursor_position.x = cursor_x;
+        return true;        
+    }
 
     static draw_sqrt(row, column) {
         if (!(g_text_buffer[row].text[column+1].startsWith('{'))) {
@@ -267,50 +311,6 @@ class math_symbol {
         }
     }
 
-    static create_sqrt(key) {
-        if (key.key == "Enter" || key.key == "Tab") { // Check if we should stop creating the sqrt
-            g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, "\\" + g_current_symbol);
-            g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 0, "");
-            for (var i = 0; i < g_tmp_buffer.length; i++) {
-                g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += g_tmp_buffer[i];
-            }
-            g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += '}';
-            return false;
-        }
-        reload_buffer();
-        var cursor_x = g_cursor_position.x + 1;
-        g_cursor_position.x = g_current_symbol_position.x;
-        write_text('√', false);
-        if (g_tmp_buffer === "") {
-            g_tmp_buffer = "{"
-            return true;
-        }      
-        if (key.key == "Backspace") {
-            if (g_tmp_buffer === "{") {
-                g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 1);
-                reload_buffer();
-                g_current_symbol = "";
-                g_tmp_buffer = "";
-                g_reading_math_symbol = false;
-            }
-            cursor_x-=2;
-            g_tmp_buffer = g_tmp_buffer.substring(0, g_tmp_buffer.length-1);
-        }
-        else {
-            g_tmp_buffer += key.key;
-        }
-        g_ctx.beginPath();
-        g_ctx.moveTo(cursor_x_to_pixels(g_current_symbol_position.x) + g_ctx.measureText('√').width/2, get_cursor_y_in_pixels() - max_height); // Draw the covering line
-        g_ctx.lineTo(cursor_x_to_pixels(g_current_symbol_position.x + g_tmp_buffer.length-1) + g_ctx.measureText('√').width/2, get_cursor_y_in_pixels() - max_height);
-        g_ctx.closePath();
-        g_ctx.stroke();
-
-        for (var i = 1; i < g_tmp_buffer.length; i++) {
-            write_text(g_tmp_buffer[i], false);
-        }
-        g_cursor_position.x = cursor_x;
-        return true;        
-    }
 
     static draw_nrt(row, column) {
         if (g_text_buffer[row].text[column+1] !== '{') {
@@ -324,11 +324,13 @@ class math_symbol {
 
     static create_frac(key) {
         reload_buffer();
-        var pushed_cursor_position_x = g_cursor_position.x;
         if (!g_tmp_buffer.startsWith("{")) {
             scale_cursor(1, .5);
             g_tmp_buffer = "{";
             return true;
+        }
+        else if (key.key === "/") {
+            scale_cursor(1, .5);
         }
 
         if (g_tmp_buffer.indexOf('}') !== -1) { // If the first part of the fraction is complete
@@ -373,16 +375,11 @@ class math_symbol {
                 }
                 write_text(g_tmp_buffer[i], false);
             }
-            if (is_text_key(key))
+            if (is_text_key(key) && key.key !== "/")
                 write_text(key.key, false);
             g_cursor_position.y-=.5;
         }
         else {
-            if (key.key === "ArrowDown" || key.key === "Enter") {
-                g_tmp_buffer += "}";
-                increment_cursor_position(0, -1);
-                return math_symbol.create_frac(key);
-            }
             g_cursor_position.y-=.5;
             g_ctx.beginPath();
             g_ctx.moveTo(cursor_x_to_pixels(g_current_symbol_position.x-1), get_cursor_y_in_pixels() + g_ctx.measureText(key).actualBoundingBoxAscent/2); // Draw the covering line
@@ -395,9 +392,14 @@ class math_symbol {
             }
             if (is_text_key(key))
                 write_text(key.key, false);
-            g_cursor_position.y+=.5;
+            else if (key.key === "ArrowDown" || key.key === "Enter") {
+                g_tmp_buffer += "}";
+                g_cursor_position.y+=.5;
+                increment_cursor_position(0, -1);
+                return true;
+            }
         }
-        if (is_text_key(key))
+        if (is_text_key(key) && key.key !== "/")
             g_tmp_buffer += key.key;
         return true;
     }
@@ -979,9 +981,23 @@ function key_pressed(key, append_to_buffer) {
         g_current_symbol_position.y = g_cursor_position.y;
     }
     else if (key.key === "/") {
-        g_state = states.create_symbol;
         g_current_symbol_position.x = g_cursor_position.x;
         g_current_symbol_position.y = g_cursor_position.y;
+        var previous = "";
+        var splice_length = 0;
+        for (var i = g_cursor_position.x-1; i >= 0; i--) {
+            if (g_text_buffer[g_cursor_position.y].text[i] === " " || g_text_buffer[g_cursor_position.y].text[i+1] === "(") {
+                break;
+            }
+            previous += g_text_buffer[g_cursor_position.y].text[i];
+            splice_length++;
+        }
+        if (previous !== "" && previous !== " ") {
+            g_text_buffer[g_cursor_position.y].text.splice(g_cursor_position.x-splice_length, splice_length);
+            g_current_symbol_position.x-=splice_length;
+            g_tmp_buffer = "{" + previous + "}";
+        }
+        g_state = states.create_symbol;
         g_current_symbol = "frac";
     }
     if (g_state === states.create_symbol) {
