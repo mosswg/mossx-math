@@ -130,6 +130,32 @@ class line {
     }
 
     /**
+     * 
+     * @param {number} column The column of the value to be checked 
+     * @returns if the element at the given value is part of a math symbol
+     */
+    is_symbol(column) {
+        if (column > this.text.length-1) return false;
+        var curr = 0;
+        for (var i = 0; i < this.char_length(); curr++) {
+            if (column <= line.get_modified_length(this.text[curr]) + i) {
+                if (this.text[curr].length !== 1 && (!is_valid_symbol(this.text[curr]) && !this.text[curr].startsWith("{"))) {
+                    return false;
+                }
+                else {
+                    return this.text[curr].startsWith("\\") ||  this.text[curr].startsWith("{");
+                }
+            }
+            else {
+                i += line.get_modified_length(this.text[curr]);
+            }
+        }
+        
+    }
+
+
+
+    /**
      * @param {String} text The text whose length will be gotten.
      * @returns {Number} the length of the text as it is displayed.
      */
