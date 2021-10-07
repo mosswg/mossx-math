@@ -94,7 +94,7 @@ class line {
      */
     select_line() {
         this.selection.start = 0;
-        this.selection.end = this.text.length-1;
+        this.selection.end = this.text.length;
     }
 
     /**
@@ -700,12 +700,12 @@ function mouse_click_listener(e) {
 function control_key_pressed(key) {
     switch(key.key) {
         case 'a':
-            g_selection_start.x = 0;
-            g_selection_start.y = 0;
-            g_selection_end.x = g_text_buffer[g_text_buffer.length-1].length()-1; /// FIXME: We should find the max row width instead 
-            g_selection_end.y = g_text_buffer.length-1;
+            for (var i = 0; i < g_text_buffer.length; i++) {
+                g_text_buffer[i].select_line();
+            }
             reload_buffer();
             break;
+        
     }
 }
 
