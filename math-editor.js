@@ -201,6 +201,229 @@ class line {
     }
 }
 
+class m_symbol {
+    row;
+    column;
+    name;
+    args = [];
+
+    constructor(row, column, name) {
+        if (row === undefined) {
+            this.row = g_cursor_position.y;
+        }
+        else {
+            this.row = row;
+        }
+        if (column === undefined) {
+            this.column = g_cursor_position.x;
+        }
+        else {
+            this.column = column;
+        }
+        this.name = name;
+        //g_text_buffer[this.row].text.splice(this.column, 0, this);
+    }
+
+    displayed_length() { m_symbol.instance_error();  return 0; }
+
+    insert(element, pos, arg) {
+        this.args[arg].splice(pos, 0, element);
+    }
+
+    delete(pos, arg) {
+        this.args[arg].splice(pos, 1);
+    }
+
+    
+    // TODO: SCALE BEFORE CALLING THIS METHOD
+    draw(row, column) { m_symbol.instance_error(); }
+
+    get_pos_from_cursor() { 
+        if (g_cursor_position.y !== this.row) {
+            return -1;
+        }
+
+        return g_cursor_position.x - this.column; 
+    }
+
+    get_cursor_scale(pos, arg) { return new point(1, 1); }
+
+    get_cursor_offset(pos, arg) { return new point(0, 0); }
+
+    to_string() { 
+        var out = this.name;
+        for (var i = 0; i < this.args.length; i++) {
+            out += "{";
+            for (var j = 0; j < this.args[i].length; j++) {
+                out += this.args[i][j];
+            }
+            out += "}";
+        }
+        return out;
+    }
+
+    static instance_error() {
+        console.log("ERROR: Instance of base symbol is not supported");
+    }
+}
+
+class nrt extends m_symbol {
+    constructor(row, column) { 
+        super(row, column, "\\nrt");
+        this.args.push([], []);
+    }
+
+    displayed_length() {
+        return this.args[0].length + this.args[1].length + 1;
+    }
+
+    draw(row, column) {
+
+    }
+}
+
+class sqrt extends m_symbol {
+    constructor(row, column) { 
+        super(row, column, "\\sqrt");
+        this.args.push([]);
+    }
+
+    displayed_length() {
+        return this.args[0].length + 1;
+    }
+
+
+    draw(row, column) { 
+        if (row === undefined) {
+            row = g_cursor_position.x;
+        }
+        if (column === undefined) {
+            column = g_cursor_position.y;
+        }
+
+        write_text('√');            
+        g_ctx.beginPath();
+        g_ctx.moveTo(cursor_x_to_pixels(column) + g_ctx.measureText('√').width/2, cursor_y_to_pixels(row) - g_ctx.measureText('√').actualBoundingBoxAscent); // Draw the covering line
+        g_ctx.lineTo(cursor_x_to_pixels(column + this.args[0].length) + g_ctx.measureText('√').width/2, cursor_y_to_pixels(row) - g_ctx.measureText('√').actualBoundingBoxAscent);
+        g_ctx.closePath();
+        g_ctx.stroke();             
+        for (var i = 0; i < this.args[0].length; i++) {
+            write_text(this.args[0][i], false);
+        }
+    }
+}
+
+
+class frac extends m_symbol {
+    constructor(row, column) {
+        super(row, column, "\\frac");
+        this.args.push([], []);
+    }
+
+    displayed_length() { return Math.max(this.args[0].length, this.args[1].length); }
+
+
+    draw(row, column) { 
+        if (row === undefined) {
+            row = g_cursor_position.y;
+        }
+        if (column === undefined) {
+            column = g_cursor_position.x;
+        }
+        var tot_length = this.args[0].length + this.args[1].length;
+        var numerator_off = Math.max(0, (tot_length/2) - (this.args[0].length));
+        var denom_off = Math.max(0, (this.args[0].length) - (tot_length/2));
+        g_cursor_position.y-=.5;
+        g_cursor_position.x += numerator_off;
+        g_ctx.beginPath();
+        g_ctx.moveTo(cursor_x_to_pixels(column-1), cursor_y_to_pixels(row) - g_ctx.measureText('1').actualBoundingBoxAscent/2); // Draw the covering line
+        g_ctx.lineTo(cursor_x_to_pixels(column-.5 + this.displayed_length()), cursor_y_to_pixels(row) - g_ctx.measureText('1').actualBoundingBoxAscent/2);
+        g_ctx.closePath();
+        g_ctx.stroke();
+        for (var i = 0; i < this.args[0].length; i++) {
+            write_text(this.args[0][i], false);
+        }
+        g_cursor_position.y++;
+        if (this.args.displayed_length !== undefined) {
+            g_cursor_position.x -= (this.args[0].displayed_length()) + numerator_off;
+        }
+        else {
+            g_cursor_position.x -= (this.args[0].length) + numerator_off;
+        }
+        g_cursor_position.x += denom_off;
+        for (var i = 0; i < this.args[1].length; i++) {
+            write_text(this.args[1][i], false);
+        }
+        g_cursor_position.x++;
+        g_cursor_position.y-=.5;
+    }
+
+    get_cursor_scale(pos, arg) { 
+        return new point(1, 0.5);    
+    }
+
+    get_cursor_offset(pos, arg) { 
+        if (arg === 0) { 
+            return new point(0, -0.5);
+        }
+        else { 
+            return new point(0, 0.5);
+        }
+    }
+}
+
+class pi extends m_symbol {
+    constructor(row, column) {
+        super(row, column, "\\pi");
+    }
+
+    displayed_length() {
+        return 1;
+    }
+
+
+    draw() {
+        write_text('π', false);
+    }
+}
+
+class theta extends m_symbol {
+    constructor(row, column) {
+        super(row, column, "\\pi");
+    }
+
+    displayed_length() {
+        return 1;
+    }
+
+    draw() {
+        write_text('θ', false);
+    }
+}
+
+class subscript extends m_symbol {
+    constructor(row, column) {
+        super(row, column, "_");
+        this.args.push([]);
+    }
+
+    displayed_length() {
+        return this.args[0].length;
+    }
+
+    get_cursor_scale() {
+        return new point(1, .5);
+    }
+
+    draw() {        
+        for (var i = 0; i < this.args[0].length; i++) {
+            write_text(this.args[0][i], false);
+        }
+    }
+}
+
+
+
 class math_symbol {
     constructor(construct, draw) {
         this.construct = construct;
@@ -210,7 +433,7 @@ class math_symbol {
 
     static create_sqrt(key) {
         if (key.key == "Enter" || key.key == "Tab") { // Check if we should stop creating the sqrt
-            g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, "\\" + g_current_symbol);
+            g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, g_current_symbol);
             g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 0, "");
             for (var i = 0; i < g_tmp_buffer.length; i++) {
                 g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += g_tmp_buffer[i];
@@ -344,7 +567,7 @@ class math_symbol {
             if (key.key === "Enter" || key.key === "Tab") {
                 scale_cursor(1, 2);
                 increment_cursor_position(1, 0);
-                g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, "\\" + g_current_symbol);
+                g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, g_current_symbol);
                 g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 0, "");
                 for (var i = 0; i < numerator_length; i++) {
                     g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += g_tmp_buffer[i];
@@ -432,7 +655,7 @@ class math_symbol {
     }
 
     static create_pi() {
-        g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, "\\" + g_current_symbol);
+        g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, g_current_symbol);
         g_cursor_position.x++;
         return false;
     }
@@ -442,7 +665,7 @@ class math_symbol {
     }
 
     static create_theta() {
-        g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, "\\" + g_current_symbol);
+        g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, g_current_symbol);
         g_cursor_position.x++;
         return false;
     }
@@ -508,16 +731,16 @@ class math_symbol {
 }
 
 const valid_math_symbols = {
-    "sqrt" : new math_symbol(math_symbol.create_sqrt, math_symbol.draw_sqrt),
-    "nrt" : new math_symbol(math_symbol.create_nrt, math_symbol.draw_nrt),
-    "frac" : new math_symbol(math_symbol.create_frac, math_symbol.draw_frac),
-    "pi" : new math_symbol(math_symbol.create_pi, math_symbol.draw_pi),
-    "theta" : new math_symbol(math_symbol.create_theta, math_symbol.draw_theta),
+    "\\sqrt" : new math_symbol(math_symbol.create_sqrt, math_symbol.draw_sqrt),
+    "\\nrt" : new math_symbol(math_symbol.create_nrt, math_symbol.draw_nrt),
+    "\\frac" : new math_symbol(math_symbol.create_frac, math_symbol.draw_frac),
+    "\\pi" : new math_symbol(math_symbol.create_pi, math_symbol.draw_pi),
+    "\\theta" : new math_symbol(math_symbol.create_theta, math_symbol.draw_theta),
     "_" :  new math_symbol(math_symbol.create_subscript, math_symbol.draw_subscript)
 }
 
 function finish_math_symbol() {
-    g_current_symbol = "".concat(g_tmp_buffer); // Copy the contents instead of storing a reference to the variable
+    g_current_symbol = "\\" + g_tmp_buffer; // Copy the contents instead of storing a reference to the variable
     g_tmp_buffer = "";
     g_cursor_position.x -= g_current_symbol.length-1;
     create_math_symbol("");
@@ -525,7 +748,7 @@ function finish_math_symbol() {
 
 
 const letter_space = new point(0, 5);
-const default_position = new point(15, 25);
+const default_position = new point(font_size, font_size);
 
 
 var g_text_buffer = [new line()];
@@ -543,10 +766,8 @@ var g_canvas;
 var g_ctx;
 
 function is_valid_symbol(symbol) {
-    if (symbol.startsWith('\\')) {
-        symbol = symbol.substring(1); // Trim the leading backslash.
-    }
-    return valid_math_symbols[symbol] != undefined;
+
+    return valid_math_symbols[symbol] !== undefined;
 }
 
 function clamp(val, min, max) {
@@ -559,6 +780,16 @@ function set_cursor_position(x, y) {
 
     g_cursor_position.x = x;
     g_cursor_position.y = y;
+
+    update_cursor();
+}
+
+function decrement_cursor_position(x, y) {
+    y = clamp(y, -g_cursor_position.y, g_text_buffer.length-1 - g_cursor_position.y);
+    x = clamp(x, -g_cursor_position.x, g_text_buffer[g_cursor_position.y + y].char_length() - g_cursor_position.x);
+
+    g_cursor_position.x -= x;
+    g_cursor_position.y -= y;
 
     update_cursor();
 }
@@ -709,6 +940,19 @@ function scale_cursor(x, y) {
     g_ctx.font = (font_size*Math.min(g_cursor_scale.x, g_cursor_scale.y)) + "px " + font_name;
 }
 
+/**
+ * Unscales the scale of the cursor and text. \
+ * 1 is the default scale of everything.
+ * 
+ * @param {number} x 
+ * @param {number} y 
+ */
+ function unscale_cursor(x, y) {
+    g_cursor_scale.x /= x;
+    g_cursor_scale.y /= y;
+    g_ctx.font = (font_size*Math.min(g_cursor_scale.x, g_cursor_scale.y)) + "px " + font_name;
+}
+
 
 /**
  * Sets the scale of the cursor and text. \
@@ -834,7 +1078,7 @@ function create_math_symbol(key) {
 
 
         g_tmp_buffer = g_tmp_buffer.concat(key.key);
-        if (is_valid_symbol(g_tmp_buffer)) {
+        if (is_valid_symbol("\\" + g_tmp_buffer)) {
             finish_math_symbol(g_tmp_buffer);
         }
         else if (key.key === " ") { // If it's not a supported symbol write as plain text
@@ -929,8 +1173,6 @@ function navigate(key) {
 }
 
 function draw_math_symbol(symbol, row, column) {
-    symbol = symbol.substring(1).toLowerCase(); // Remove the backslash and ensure it's lowercase.
-
     if (is_valid_symbol(symbol)) {
         valid_math_symbols[symbol].draw(row, column);
     }
@@ -1076,20 +1318,30 @@ function key_pressed(key, append_to_buffer) {
 }
 
 
-function write_text(key, append_to_buffer) {
-    if (key.length !== 1 && key.startsWith('\\')) {
-        draw_math_symbol(key, g_cursor_position.y, g_cursor_position.x);
+function write_text(text, append_to_buffer) {
+    if (text.draw !== undefined) {
+        var scale = text.get_cursor_scale(text.get_pos_from_cursor(), 0);
+        console.log(scale, g_cursor_scale);
+        scale_cursor(scale.x, scale.y);
+        console.log(g_cursor_scale);
+        text.draw();
+        unscale_cursor(scale.x, scale.y);
         return;
     }
-    else if (key.startsWith('{')) {
+
+    if (text.length !== 1 && text.startsWith('\\')) {
+        draw_math_symbol(text, g_cursor_position.y, g_cursor_position.x);
         return;
     }
-    g_ctx.fillText(key, get_cursor_x_in_pixels(), get_cursor_y_in_pixels());
+    else if (text.startsWith('{')) {
+        return;
+    }
+    g_ctx.fillText(text, get_cursor_x_in_pixels(), get_cursor_y_in_pixels());
     if (append_to_buffer) {
         if (something_is_selected()) {
             delete_selected();
         }
-        insert_letter_at_cursor(key);
+        insert_letter_at_cursor(text);
     }
     else {
         g_cursor_position.x++;
