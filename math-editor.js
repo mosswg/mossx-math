@@ -1,3 +1,6 @@
+import * as symbol from "./math_symbols.js";
+export { g_cursor_position, g_ctx, write_text, g_text_buffer };
+
 const bg_color = "#212529";
 const text_color = "#6c757d";
 
@@ -8,14 +11,13 @@ const font_size = 30;
 const selection_alpha = 0.35;
 
 var max_height = 0;
-var max_width = 0;
 
 const cursor_blink_speed = 300;
 
 const states = {
     text: write_text,
     navigation: navigate,
-    create_symbol: create_math_symbol,
+    create_symbol: identify_math_symbol,
     edit_symbol: edit_math_symbol,
 }
 
@@ -131,7 +133,7 @@ class line {
         var curr = 0;
         for (var i = 0; i < this.char_length(); curr++) {
             if (idx <= line.get_modified_length(this.text[curr]) + i) {
-                if (this.text[curr].length !== 1 && !is_valid_symbol(this.text[curr])) {
+                if (this.text[curr].length !== 1 && !symbol.is_valid(this.text[curr])) {
                     this.text[curr] = this.text[curr].substring(0, idx - curr) + this.text[i].substring(idx - curr + 1);
                 }
                 else {
@@ -155,12 +157,7 @@ class line {
         var curr = 0;
         for (var i = 0; i < this.char_length(); curr++) {
             if (column <= line.get_modified_length(this.text[curr]) + i) {
-                if (this.text[curr].length !== 1 && (!is_valid_symbol(this.text[curr]) && !this.text[curr].startsWith("{"))) {
-                    return false;
-                }
-                else {
-                    return this.text[curr].startsWith("\\") ||  this.text[curr].startsWith("{");
-                }
+                return this.text[i].draw !== undefined;
             }
             else {
                 i += line.get_modified_length(this.text[curr]);
@@ -170,7 +167,7 @@ class line {
     }
 
     get_modified_length(index) {
-        if (is_valid_symbol(this.text[index])) {
+        if (symbol.is_valid(this.text[index])) {
             return 1;
         }
         
@@ -189,7 +186,7 @@ class line {
      * @returns {Number} the length of the text as it is displayed.
      */
     static get_modified_length(text) {
-        if (is_valid_symbol(text)) {
+        if (symbol.is_valid(text)) {
             return 1;
         }
         
@@ -201,555 +198,7 @@ class line {
     }
 }
 
-class m_symbol {
-    row;
-    column;
-    name;
-    args = [];
-
-    constructor(row, column, name) {
-        if (row === undefined) {
-            this.row = g_cursor_position.y;
-        }
-        else {
-            this.row = row;
-        }
-        if (column === undefined) {
-            this.column = g_cursor_position.x;
-        }
-        else {
-            this.column = column;
-        }
-        this.name = name;
-        //g_text_buffer[this.row].text.splice(this.column, 0, this);
-    }
-
-    displayed_length() { m_symbol.instance_error();  return 0; }
-
-    insert(element, pos, arg) {
-        this.args[arg].splice(pos, 0, element);
-    }
-
-    delete(pos, arg) {
-        this.args[arg].splice(pos, 1);
-    }
-
-    
-    // TODO: SCALE BEFORE CALLING THIS METHOD
-    draw(row, column) { m_symbol.instance_error(); }
-
-    get_pos_from_cursor() { 
-        if (g_cursor_position.y !== this.row) {
-            return -1;
-        }
-
-        return g_cursor_position.x - this.column; 
-    }
-
-    get_cursor_scale(pos, arg) { return new point(1, 1); }
-
-    get_cursor_offset(pos, arg) { return new point(0, 0); }
-
-    to_string() { 
-        var out = this.name;
-        for (var i = 0; i < this.args.length; i++) {
-            out += "{";
-            for (var j = 0; j < this.args[i].length; j++) {
-                out += this.args[i][j];
-            }
-            out += "}";
-        }
-        return out;
-    }
-
-    static instance_error() {
-        console.log("ERROR: Instance of base symbol is not supported");
-    }
-}
-
-class nrt extends m_symbol {
-    constructor(row, column) { 
-        super(row, column, "\\nrt");
-        this.args.push([], []);
-    }
-
-    displayed_length() {
-        return this.args[0].length + this.args[1].length + 1;
-    }
-
-    draw(row, column) {
-
-    }
-}
-
-class sqrt extends m_symbol {
-    constructor(row, column) { 
-        super(row, column, "\\sqrt");
-        this.args.push([]);
-    }
-
-    displayed_length() {
-        return this.args[0].length + 1;
-    }
-
-
-    draw(row, column) { 
-        if (row === undefined) {
-            row = g_cursor_position.x;
-        }
-        if (column === undefined) {
-            column = g_cursor_position.y;
-        }
-
-        write_text('√');            
-        g_ctx.beginPath();
-        g_ctx.moveTo(cursor_x_to_pixels(column) + g_ctx.measureText('√').width/2, cursor_y_to_pixels(row) - g_ctx.measureText('√').actualBoundingBoxAscent); // Draw the covering line
-        g_ctx.lineTo(cursor_x_to_pixels(column + this.args[0].length) + g_ctx.measureText('√').width/2, cursor_y_to_pixels(row) - g_ctx.measureText('√').actualBoundingBoxAscent);
-        g_ctx.closePath();
-        g_ctx.stroke();             
-        for (var i = 0; i < this.args[0].length; i++) {
-            write_text(this.args[0][i], false);
-        }
-    }
-}
-
-
-class frac extends m_symbol {
-    constructor(row, column) {
-        super(row, column, "\\frac");
-        this.args.push([], []);
-    }
-
-    displayed_length() { return Math.max(this.args[0].length, this.args[1].length); }
-
-
-    draw(row, column) { 
-        if (row === undefined) {
-            row = g_cursor_position.y;
-        }
-        if (column === undefined) {
-            column = g_cursor_position.x;
-        }
-        var tot_length = this.args[0].length + this.args[1].length;
-        var numerator_off = Math.max(0, (tot_length/2) - (this.args[0].length));
-        var denom_off = Math.max(0, (this.args[0].length) - (tot_length/2));
-        g_cursor_position.y-=.5;
-        g_cursor_position.x += numerator_off;
-        g_ctx.beginPath();
-        g_ctx.moveTo(cursor_x_to_pixels(column-1), cursor_y_to_pixels(row) - g_ctx.measureText('1').actualBoundingBoxAscent/2); // Draw the covering line
-        g_ctx.lineTo(cursor_x_to_pixels(column-.5 + this.displayed_length()), cursor_y_to_pixels(row) - g_ctx.measureText('1').actualBoundingBoxAscent/2);
-        g_ctx.closePath();
-        g_ctx.stroke();
-        for (var i = 0; i < this.args[0].length; i++) {
-            write_text(this.args[0][i], false);
-        }
-        g_cursor_position.y++;
-        if (this.args.displayed_length !== undefined) {
-            g_cursor_position.x -= (this.args[0].displayed_length()) + numerator_off;
-        }
-        else {
-            g_cursor_position.x -= (this.args[0].length) + numerator_off;
-        }
-        g_cursor_position.x += denom_off;
-        for (var i = 0; i < this.args[1].length; i++) {
-            write_text(this.args[1][i], false);
-        }
-        g_cursor_position.x++;
-        g_cursor_position.y-=.5;
-    }
-
-    get_cursor_scale(pos, arg) { 
-        return new point(1, 0.5);    
-    }
-
-    get_cursor_offset(pos, arg) { 
-        if (arg === 0) { 
-            return new point(0, -0.5);
-        }
-        else { 
-            return new point(0, 0.5);
-        }
-    }
-}
-
-class pi extends m_symbol {
-    constructor(row, column) {
-        super(row, column, "\\pi");
-    }
-
-    displayed_length() {
-        return 1;
-    }
-
-
-    draw() {
-        write_text('π', false);
-    }
-}
-
-class theta extends m_symbol {
-    constructor(row, column) {
-        super(row, column, "\\pi");
-    }
-
-    displayed_length() {
-        return 1;
-    }
-
-    draw() {
-        write_text('θ', false);
-    }
-}
-
-class subscript extends m_symbol {
-    constructor(row, column) {
-        super(row, column, "_");
-        this.args.push([]);
-    }
-
-    displayed_length() {
-        return this.args[0].length;
-    }
-
-    get_cursor_scale() {
-        return new point(1, .5);
-    }
-
-    draw() {        
-        for (var i = 0; i < this.args[0].length; i++) {
-            write_text(this.args[0][i], false);
-        }
-    }
-}
-
-
-
-class math_symbol {
-    constructor(construct, draw) {
-        this.construct = construct;
-        this.draw = draw;
-    }
-
-
-    static create_sqrt(key) {
-        if (key.key == "Enter" || key.key == "Tab") { // Check if we should stop creating the sqrt
-            g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, g_current_symbol);
-            g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 0, "");
-            for (var i = 0; i < g_tmp_buffer.length; i++) {
-                g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += g_tmp_buffer[i];
-            }
-            g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += '}';
-            return false;
-        }
-        reload_buffer();
-        var cursor_x = g_cursor_position.x + 1;
-        g_cursor_position.x = g_current_symbol_position.x;
-        write_text('√', false);
-        if (g_tmp_buffer === "") {
-            g_tmp_buffer = "{"
-            return true;
-        }      
-        if (key.key == "Backspace") {
-            if (g_tmp_buffer === "{") {
-                g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 1);
-                reload_buffer();
-                g_current_symbol = "";
-                g_tmp_buffer = "";
-                g_reading_math_symbol = false;
-            }
-            cursor_x-=2;
-            g_tmp_buffer = g_tmp_buffer.substring(0, g_tmp_buffer.length-1);
-        }
-        else {
-            g_tmp_buffer += key.key;
-        }
-        g_ctx.beginPath();
-        g_ctx.moveTo(cursor_x_to_pixels(g_current_symbol_position.x) + g_ctx.measureText('√').width/2, get_cursor_y_in_pixels() - max_height); // Draw the covering line
-        g_ctx.lineTo(cursor_x_to_pixels(g_current_symbol_position.x + g_tmp_buffer.length-1) + g_ctx.measureText('√').width/2, get_cursor_y_in_pixels() - max_height);
-        g_ctx.closePath();
-        g_ctx.stroke();
-
-        for (var i = 1; i < g_tmp_buffer.length; i++) {
-            write_text(g_tmp_buffer[i], false);
-        }
-        g_cursor_position.x = cursor_x;
-        return true;        
-    }
-
-    static draw_sqrt(row, column) {
-        if (!(g_text_buffer[row].text[column+1].startsWith('{'))) {
-            write_text('√');
-            g_ctx.beginPath();
-            g_ctx.moveTo(cursor_x_to_pixels(column), cursor_y_to_pixels(row) + max_height); // Draw the covering line
-            g_ctx.lineTo(cursor_x_to_pixels(column+1), cursor_y_to_pixels(row) + max_height);
-            g_ctx.stroke();
-            if (!is_valid_symbol(g_text_buffer[row].text[column+1])) {
-                write_text(g_text_buffer[row].text[column+1]);
-            }
-            else {
-                valid_math_symbols[g_text_buffer[row].text[column+1]]();
-            }
-        }
-        else {
-            write_text('√');            
-            if (g_text_buffer[row].text[column+1].length === 1) { // if pasted from a separate source they will be single characters whereas from us they will be in string format
-                var num_curly = 1;
-                var end_curly = -1;
-                for (i = column+2; i < g_text_buffer[row].length(); i++) {
-                    if (g_text_buffer[row].text[i] === '{') {
-                        num_curly++;
-                    }
-                    else if (g_text_buffer[row].text[i] === '}') {
-                        num_curly--;
-                    }
-    
-                    if (num_curly === 0) { 
-                        end = i;
-                    }
-                }
-                if (end === -1) {
-                    console.error("Error: Missing End Curly Bracket");
-                    return;
-                }
-                g_ctx.beginPath();
-                g_ctx.moveTo(cursor_x_to_pixels(column) + g_ctx.measureText('√').width/2, cursor_y_to_pixels(row) - max_height); // Draw the covering line
-                g_ctx.lineTo(cursor_x_to_pixels(end_curly) + g_ctx.measureText('√').width/2, cursor_y_to_pixels(row) - max_height);
-                g_ctx.stroke();
-                
-                for (var i = column+2; i < end_curly; i++) {
-                    write_text(g_text_buffer[row].text[i], false);
-                }
-            }
-            else {
-                g_ctx.beginPath();
-                g_ctx.moveTo(cursor_x_to_pixels(column) + g_ctx.measureText('√').width/2, cursor_y_to_pixels(row) - max_height); // Draw the covering line
-                g_ctx.lineTo(cursor_x_to_pixels(column + g_text_buffer[row].text[column+1].length-2) + g_ctx.measureText('√').width/2, cursor_y_to_pixels(row) - max_height);
-                g_ctx.closePath();
-                g_ctx.stroke();             
-                for (var i = 1; i < g_text_buffer[row].text[column+1].length-1; i++) {
-                    write_text(g_text_buffer[row].text[column+1].charAt(i), false);
-                }
-            }
-            
-        }
-    }
-
-
-    static draw_nrt(row, column) {
-        if (g_text_buffer[row].text[column+1] !== '{') {
-            draw_sqrt(row, column);
-        }
-        else {
-            
-        }
-    }
-
-
-    static create_frac(key) {
-        reload_buffer();
-        if (!g_tmp_buffer.startsWith("{")) {
-            scale_cursor(1, .5);
-            g_tmp_buffer = "{";
-            return true;
-        }
-        else if (key.key === "/") {
-            scale_cursor(1, .5);
-        }
-
-        if (g_tmp_buffer.indexOf('}') !== -1) { // If the first part of the fraction is complete
-            var numerator_length = g_tmp_buffer.indexOf("}") + 1;
-            var length = Math.max(numerator_length-2, (g_tmp_buffer.length-2) - (numerator_length-2));
-            var numerator_off = Math.max(0, (g_tmp_buffer.length/2) - (numerator_length-1));
-            var denom_off = Math.max(0, (numerator_length-1) - (g_tmp_buffer.length/2));
-            if (g_tmp_buffer.endsWith("}")) {
-                g_tmp_buffer += "{";
-            }
-            if (key.key === "Enter" || key.key === "Tab") {
-                scale_cursor(1, 2);
-                increment_cursor_position(1, 0);
-                g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, g_current_symbol);
-                g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 0, "");
-                for (var i = 0; i < numerator_length; i++) {
-                    g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += g_tmp_buffer[i];
-                }
-                g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 2, 0, "");
-                for (var i = 0; i < g_tmp_buffer.length - numerator_length; i++) {
-                    g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 2] += g_tmp_buffer[i + numerator_length];
-                }
-                g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 2] += '}';
-                g_cursor_position.x = g_current_symbol_position.x + length;
-                return false;
-            }
-            g_cursor_position.y-=.5;
-            g_cursor_position.x += numerator_off;        
-            g_ctx.beginPath();
-            g_ctx.moveTo(cursor_x_to_pixels(g_current_symbol_position.x-1), get_cursor_y_in_pixels() + g_ctx.measureText(key).actualBoundingBoxAscent/2); // Draw the covering line
-            g_ctx.lineTo(cursor_x_to_pixels(g_current_symbol_position.x-.5 + length), get_cursor_y_in_pixels() + g_ctx.measureText(key).actualBoundingBoxAscent/2);
-            g_ctx.closePath();
-            g_ctx.stroke();
-            g_cursor_position.x = g_current_symbol_position.x;
-            for (var i = 0; i < g_tmp_buffer.length; i++) {
-                if (g_tmp_buffer[i] === '}') {
-                    g_cursor_position.y++;
-                    g_cursor_position.x -= (i-1) + numerator_off;
-                    g_cursor_position.x += denom_off;
-                    i++;
-                    continue;
-                }
-                write_text(g_tmp_buffer[i], false);
-            }
-            if (is_text_key(key) && key.key !== "/")
-                write_text(key.key, false);
-            g_cursor_position.y-=.5;
-        }
-        else {
-            g_cursor_position.y-=.5;
-            g_ctx.beginPath();
-            g_ctx.moveTo(cursor_x_to_pixels(g_current_symbol_position.x-1), get_cursor_y_in_pixels() + g_ctx.measureText(key).actualBoundingBoxAscent/2); // Draw the covering line
-            g_ctx.lineTo(cursor_x_to_pixels(g_current_symbol_position.x-.5 + g_tmp_buffer.length), get_cursor_y_in_pixels() + g_ctx.measureText(key).actualBoundingBoxAscent/2);
-            g_ctx.closePath();
-            g_ctx.stroke();
-            g_cursor_position.x = g_current_symbol_position.x;
-            for (var i = 0; i < g_tmp_buffer.length; i++) {
-                write_text(g_tmp_buffer[i], false);
-            }
-            if (is_text_key(key))
-                write_text(key.key, false);
-            else if (key.key === "ArrowDown" || key.key === "Enter") {
-                g_tmp_buffer += "}";
-                g_cursor_position.y+=.5;
-                increment_cursor_position(0, -1);
-                return true;
-            }
-        }
-        if (is_text_key(key) && key.key !== "/")
-            g_tmp_buffer += key.key;
-        return true;
-    }
-
-    static draw_frac(row, column) {
-        scale_cursor(1, .5);
-        var tot_length = g_text_buffer[row].text[column+1].length + g_text_buffer[row].text[column+2].length;
-        var drawn_length = Math.max(g_text_buffer[row].text[column+1].length, g_text_buffer[row].text[column+2].length)-2;
-        var numerator_off = Math.max(0, (tot_length/2) - (g_text_buffer[row].text[column+1].length));
-        var denom_off = Math.max(0, (g_text_buffer[row].text[column+1].length) - (tot_length/2));
-        g_cursor_position.y-=.5;
-        g_cursor_position.x += numerator_off;
-        g_ctx.beginPath();
-        g_ctx.moveTo(cursor_x_to_pixels(g_current_symbol_position.x-1), get_cursor_y_in_pixels() + g_ctx.measureText('1').actualBoundingBoxAscent/2); // Draw the covering line
-        g_ctx.lineTo(cursor_x_to_pixels(g_current_symbol_position.x-.5 + drawn_length), get_cursor_y_in_pixels() + g_ctx.measureText('1').actualBoundingBoxAscent/2);
-        g_ctx.closePath();
-        g_ctx.stroke();
-        for (var i = 1; i < g_text_buffer[row].text[column+1].length-1; i++) {
-            write_text(g_text_buffer[row].text[column+1].charAt(i), false);
-        }
-        g_cursor_position.y++;
-        g_cursor_position.x -= (g_text_buffer[row].text[column+1].length - 2) + numerator_off;
-        g_cursor_position.x += denom_off;
-        for (var i = 1; i < g_text_buffer[row].text[column+2].length-1; i++) {
-            write_text(g_text_buffer[row].text[column+2].charAt(i), false);
-        }
-        g_cursor_position.x++;
-        g_cursor_position.y-=.5;
-        scale_cursor(1, 2);
-    }
-
-    static create_pi() {
-        g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, g_current_symbol);
-        g_cursor_position.x++;
-        return false;
-    }
-
-    static draw_pi() {
-        write_text('π', false);
-    }
-
-    static create_theta() {
-        g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, g_current_symbol);
-        g_cursor_position.x++;
-        return false;
-    }
-
-    static draw_theta() {
-        write_text('θ', false);
-    }
-
-    static create_subscript(key) {
-        var position_in_tmp_buffer = g_current_symbol_position.x - g_cursor_position.x;
-
-        if (key.key === "Enter" || key.key === "Tab" || (position_in_tmp_buffer === g_tmp_buffer.length-1 && key.key === "ArrowRight")) { // Check if we should stop creating the sqrt
-            g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, g_current_symbol);
-            g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 0, "");
-            for (var i = 0; i < g_tmp_buffer.length; i++) {
-                g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += g_tmp_buffer[i];
-            }
-            g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += '}';
-            return false;
-        }
-        reload_buffer();
-        var cursor_x = g_cursor_position.x + 1;
-        if (g_tmp_buffer === "") {
-            g_tmp_buffer = "{"
-            return true;
-        }      
-        if (key.key == "Backspace") {
-            if (g_tmp_buffer === "{") {
-                g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 1);
-                reload_buffer();
-                g_current_symbol = "";
-                g_tmp_buffer = "";
-                g_reading_math_symbol = false;
-            }
-            cursor_x-=2;
-            g_tmp_buffer = g_tmp_buffer.substring(0, position_in_tmp_buffer) + g_tmp_buffer.substring(position_in_tmp_buffer+1, g_tmp_buffer.length);
-        }
-        else {
-            g_tmp_buffer += key.key;
-        }
-
-        scale_cursor(1, .5);
-        g_cursor_position.x = g_current_symbol_position.x;
-        for (var i = 1; i < g_tmp_buffer.length; i++) {
-            write_text(g_tmp_buffer[i], false);
-        }
-        scale_cursor(1, 2);
-        g_cursor_position.x = cursor_x;
-        return true;
-    }
-
-    static draw_subscript(row, column) {
-        scale_cursor(1, .5);
-        for (var i = 0; i < g_text_buffer[row].text[column].length; i++) {
-            write_text(g_text_buffer[row].text[column].charAt(i), false);
-        }
-        scale_cursor(1, 2);
-    }
-
-    static create_math_symbol(symbol, key) {
-        return valid_math_symbols[symbol].construct(key);
-    }
-}
-
-const valid_math_symbols = {
-    "\\sqrt" : new math_symbol(math_symbol.create_sqrt, math_symbol.draw_sqrt),
-    "\\nrt" : new math_symbol(math_symbol.create_nrt, math_symbol.draw_nrt),
-    "\\frac" : new math_symbol(math_symbol.create_frac, math_symbol.draw_frac),
-    "\\pi" : new math_symbol(math_symbol.create_pi, math_symbol.draw_pi),
-    "\\theta" : new math_symbol(math_symbol.create_theta, math_symbol.draw_theta),
-    "_" :  new math_symbol(math_symbol.create_subscript, math_symbol.draw_subscript)
-}
-
-function finish_math_symbol() {
-    g_current_symbol = "\\" + g_tmp_buffer; // Copy the contents instead of storing a reference to the variable
-    g_tmp_buffer = "";
-    g_cursor_position.x -= g_current_symbol.length-1;
-    create_math_symbol("");
-}
-
-
-const letter_space = new point(0, 5);
 const default_position = new point(font_size, font_size);
-
 
 var g_text_buffer = [new line()];
 var g_tmp_buffer = "";
@@ -765,9 +214,327 @@ var g_state = states.text;
 var g_canvas;
 var g_ctx;
 
-function is_valid_symbol(symbol) {
 
-    return valid_math_symbols[symbol] !== undefined;
+
+// class math_symbol {
+//     constructor(construct, draw) {
+//         this.construct = construct;
+//         this.draw = draw;
+//     }
+
+
+//     static create_sqrt(key) {
+//         if (key.key == "Enter" || key.key == "Tab") { // Check if we should stop creating the sqrt
+//             g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, g_current_symbol);
+//             g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 0, "");
+//             for (var i = 0; i < g_tmp_buffer.length; i++) {
+//                 g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += g_tmp_buffer[i];
+//             }
+//             g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += '}';
+//             return false;
+//         }
+//         reload_buffer();
+//         var cursor_x = g_cursor_position.x + 1;
+//         g_cursor_position.x = g_current_symbol_position.x;
+//         write_text('√', false);
+//         if (g_tmp_buffer === "") {
+//             g_tmp_buffer = "{"
+//             return true;
+//         }      
+//         if (key.key == "Backspace") {
+//             if (g_tmp_buffer === "{") {
+//                 g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 1);
+//                 reload_buffer();
+//                 g_current_symbol = "";
+//                 g_tmp_buffer = "";
+//                 g_reading_math_symbol = false;
+//             }
+//             cursor_x-=2;
+//             g_tmp_buffer = g_tmp_buffer.substring(0, g_tmp_buffer.length-1);
+//         }
+//         else {
+//             g_tmp_buffer += key.key;
+//         }
+//         g_ctx.beginPath();
+//         g_ctx.moveTo(cursor_x_to_pixels(g_current_symbol_position.x) + g_ctx.measureText('√').width/2, get_cursor_y_in_pixels() - max_height); // Draw the covering line
+//         g_ctx.lineTo(cursor_x_to_pixels(g_current_symbol_position.x + g_tmp_buffer.length-1) + g_ctx.measureText('√').width/2, get_cursor_y_in_pixels() - max_height);
+//         g_ctx.closePath();
+//         g_ctx.stroke();
+
+//         for (var i = 1; i < g_tmp_buffer.length; i++) {
+//             write_text(g_tmp_buffer[i], false);
+//         }
+//         g_cursor_position.x = cursor_x;
+//         return true;        
+//     }
+
+//     static draw_sqrt(row, column) {
+//     if (!(g_text_buffer[row].text[column+1].startsWith('{'))) {
+//         write_text('√');
+//         g_ctx.beginPath();
+//         g_ctx.moveTo(cursor_x_to_pixels(column), cursor_y_to_pixels(row) + max_height); // Draw the covering line
+//         g_ctx.lineTo(cursor_x_to_pixels(column+1), cursor_y_to_pixels(row) + max_height);
+//         g_ctx.stroke();
+//         if (!is_valid_symbol(g_text_buffer[row].text[column+1])) {
+//             write_text(g_text_buffer[row].text[column+1]);
+//         }
+//         else {
+//             valid_math_symbols[g_text_buffer[row].text[column+1]]();
+//         }
+//     }
+//     else {
+//         write_text('√');            
+//         if (g_text_buffer[row].text[column+1].length === 1) { // if pasted from a separate source they will be single characters whereas from us they will be in string format
+//             var num_curly = 1;
+//             var end_curly = -1;
+//             for (i = column+2; i < g_text_buffer[row].length(); i++) {
+//                 if (g_text_buffer[row].text[i] === '{') {
+//                     num_curly++;
+//                 }
+//                 else if (g_text_buffer[row].text[i] === '}') {
+//                     num_curly--;
+//                 }
+
+//                 if (num_curly === 0) { 
+//                     end = i;
+//                 }
+//             }
+//             if (end === -1) {
+//                 console.error("Error: Missing End Curly Bracket");
+//                 return;
+//             }
+//             g_ctx.beginPath();
+//             g_ctx.moveTo(cursor_x_to_pixels(column) + g_ctx.measureText('√').width/2, cursor_y_to_pixels(row) - max_height); // Draw the covering line
+//             g_ctx.lineTo(cursor_x_to_pixels(end_curly) + g_ctx.measureText('√').width/2, cursor_y_to_pixels(row) - max_height);
+//             g_ctx.stroke();
+            
+//             for (var i = column+2; i < end_curly; i++) {
+//                 write_text(g_text_buffer[row].text[i], false);
+//             }
+//         }
+//         else {
+//             g_ctx.beginPath();
+//             g_ctx.moveTo(cursor_x_to_pixels(column) + g_ctx.measureText('√').width/2, cursor_y_to_pixels(row) - max_height); // Draw the covering line
+//             g_ctx.lineTo(cursor_x_to_pixels(column + g_text_buffer[row].text[column+1].length-2) + g_ctx.measureText('√').width/2, cursor_y_to_pixels(row) - max_height);
+//             g_ctx.closePath();
+//             g_ctx.stroke();             
+//             for (var i = 1; i < g_text_buffer[row].text[column+1].length-1; i++) {
+//                 write_text(g_text_buffer[row].text[column+1].charAt(i), false);
+//             }
+//         }
+        
+//     }
+//     }
+
+
+//     static draw_nrt(row, column) {
+//         if (g_text_buffer[row].text[column+1] !== '{') {
+//             draw_sqrt(row, column);
+//         }
+//         else {
+            
+//         }
+//     }
+
+
+//     static create_frac(key) {
+//         reload_buffer();
+//         if (!g_tmp_buffer.startsWith("{")) {
+//             scale_cursor(1, .5);
+//             g_tmp_buffer = "{";
+//             return true;
+//         }
+//         else if (key.key === "/") {
+//             scale_cursor(1, .5);
+//         }
+
+//         if (g_tmp_buffer.indexOf('}') !== -1) { // If the first part of the fraction is complete
+//             var numerator_length = g_tmp_buffer.indexOf("}") + 1;
+//             var length = Math.max(numerator_length-2, (g_tmp_buffer.length-2) - (numerator_length-2));
+//             var numerator_off = Math.max(0, (g_tmp_buffer.length/2) - (numerator_length-1));
+//             var denom_off = Math.max(0, (numerator_length-1) - (g_tmp_buffer.length/2));
+//             if (g_tmp_buffer.endsWith("}")) {
+//                 g_tmp_buffer += "{";
+//             }
+//             if (key.key === "Enter" || key.key === "Tab") {
+//                 scale_cursor(1, 2);
+//                 increment_cursor_position(1, 0);
+//                 g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, g_current_symbol);
+//                 g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 0, "");
+//                 for (var i = 0; i < numerator_length; i++) {
+//                     g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += g_tmp_buffer[i];
+//                 }
+//                 g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 2, 0, "");
+//                 for (var i = 0; i < g_tmp_buffer.length - numerator_length; i++) {
+//                     g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 2] += g_tmp_buffer[i + numerator_length];
+//                 }
+//                 g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 2] += '}';
+//                 g_cursor_position.x = g_current_symbol_position.x + length;
+//                 return false;
+//             }
+//             g_cursor_position.y-=.5;
+//             g_cursor_position.x += numerator_off;        
+//             g_ctx.beginPath();
+//             g_ctx.moveTo(cursor_x_to_pixels(g_current_symbol_position.x-1), get_cursor_y_in_pixels() + g_ctx.measureText(key).actualBoundingBoxAscent/2); // Draw the covering line
+//             g_ctx.lineTo(cursor_x_to_pixels(g_current_symbol_position.x-.5 + length), get_cursor_y_in_pixels() + g_ctx.measureText(key).actualBoundingBoxAscent/2);
+//             g_ctx.closePath();
+//             g_ctx.stroke();
+//             g_cursor_position.x = g_current_symbol_position.x;
+//             for (var i = 0; i < g_tmp_buffer.length; i++) {
+//                 if (g_tmp_buffer[i] === '}') {
+//                     g_cursor_position.y++;
+//                     g_cursor_position.x -= (i-1) + numerator_off;
+//                     g_cursor_position.x += denom_off;
+//                     i++;
+//                     continue;
+//                 }
+//                 write_text(g_tmp_buffer[i], false);
+//             }
+//             if (is_text_key(key) && key.key !== "/")
+//                 write_text(key.key, false);
+//             g_cursor_position.y-=.5;
+//         }
+//         else {
+//             g_cursor_position.y-=.5;
+//             g_ctx.beginPath();
+//             g_ctx.moveTo(cursor_x_to_pixels(g_current_symbol_position.x-1), get_cursor_y_in_pixels() + g_ctx.measureText(key).actualBoundingBoxAscent/2); // Draw the covering line
+//             g_ctx.lineTo(cursor_x_to_pixels(g_current_symbol_position.x-.5 + g_tmp_buffer.length), get_cursor_y_in_pixels() + g_ctx.measureText(key).actualBoundingBoxAscent/2);
+//             g_ctx.closePath();
+//             g_ctx.stroke();
+//             g_cursor_position.x = g_current_symbol_position.x;
+//             for (var i = 0; i < g_tmp_buffer.length; i++) {
+//                 write_text(g_tmp_buffer[i], false);
+//             }
+//             if (is_text_key(key))
+//                 write_text(key.key, false);
+//             else if (key.key === "ArrowDown" || key.key === "Enter") {
+//                 g_tmp_buffer += "}";
+//                 g_cursor_position.y+=.5;
+//                 increment_cursor_position(0, -1);
+//                 return true;
+//             }
+//         }
+//         if (is_text_key(key) && key.key !== "/")
+//             g_tmp_buffer += key.key;
+//         return true;
+//     }
+
+//     static draw_frac(row, column) {
+//         scale_cursor(1, .5);
+//         var tot_length = g_text_buffer[row].text[column+1].length + g_text_buffer[row].text[column+2].length;
+//         var drawn_length = Math.max(g_text_buffer[row].text[column+1].length, g_text_buffer[row].text[column+2].length)-2;
+//         var numerator_off = Math.max(0, (tot_length/2) - (g_text_buffer[row].text[column+1].length));
+//         var denom_off = Math.max(0, (g_text_buffer[row].text[column+1].length) - (tot_length/2));
+//         g_cursor_position.y-=.5;
+//         g_cursor_position.x += numerator_off;
+//         g_ctx.beginPath();
+//         g_ctx.moveTo(cursor_x_to_pixels(g_current_symbol_position.x-1), get_cursor_y_in_pixels() + g_ctx.measureText('1').actualBoundingBoxAscent/2); // Draw the covering line
+//         g_ctx.lineTo(cursor_x_to_pixels(g_current_symbol_position.x-.5 + drawn_length), get_cursor_y_in_pixels() + g_ctx.measureText('1').actualBoundingBoxAscent/2);
+//         g_ctx.closePath();
+//         g_ctx.stroke();
+//         for (var i = 1; i < g_text_buffer[row].text[column+1].length-1; i++) {
+//             write_text(g_text_buffer[row].text[column+1].charAt(i), false);
+//         }
+//         g_cursor_position.y++;
+//         g_cursor_position.x -= (g_text_buffer[row].text[column+1].length - 2) + numerator_off;
+//         g_cursor_position.x += denom_off;
+//         for (var i = 1; i < g_text_buffer[row].text[column+2].length-1; i++) {
+//             write_text(g_text_buffer[row].text[column+2].charAt(i), false);
+//         }
+//         g_cursor_position.x++;
+//         g_cursor_position.y-=.5;
+//         scale_cursor(1, 2);
+//     }
+
+//     static create_pi() {
+//         g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, g_current_symbol);
+//         g_cursor_position.x++;
+//         return false;
+//     }
+
+//     static draw_pi() {
+//         write_text('π', false);
+//     }
+
+//     static create_theta() {
+//         g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, g_current_symbol);
+//         g_cursor_position.x++;
+//         return false;
+//     }
+
+//     static draw_theta() {
+//         write_text('θ', false);
+//     }
+
+//     static create_subscript(key) {
+//         var position_in_tmp_buffer = g_current_symbol_position.x - g_cursor_position.x;
+
+//         if (key.key === "Enter" || key.key === "Tab" || (position_in_tmp_buffer === g_tmp_buffer.length-1 && key.key === "ArrowRight")) { // Check if we should stop creating the sqrt
+//             g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, g_current_symbol);
+//             g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 0, "");
+//             for (var i = 0; i < g_tmp_buffer.length; i++) {
+//                 g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += g_tmp_buffer[i];
+//             }
+//             g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += '}';
+//             return false;
+//         }
+//         reload_buffer();
+//         var cursor_x = g_cursor_position.x + 1;
+//         if (g_tmp_buffer === "") {
+//             g_tmp_buffer = "{"
+//             return true;
+//         }      
+//         if (key.key == "Backspace") {
+//             if (g_tmp_buffer === "{") {
+//                 g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 1);
+//                 reload_buffer();
+//                 g_current_symbol = "";
+//                 g_tmp_buffer = "";
+//                 g_reading_math_symbol = false;
+//             }
+//             cursor_x-=2;
+//             g_tmp_buffer = g_tmp_buffer.substring(0, position_in_tmp_buffer) + g_tmp_buffer.substring(position_in_tmp_buffer+1, g_tmp_buffer.length);
+//         }
+//         else {
+//             g_tmp_buffer += key.key;
+//         }
+
+//         scale_cursor(1, .5);
+//         g_cursor_position.x = g_current_symbol_position.x;
+//         for (var i = 1; i < g_tmp_buffer.length; i++) {
+//             write_text(g_tmp_buffer[i], false);
+//         }
+//         scale_cursor(1, 2);
+//         g_cursor_position.x = cursor_x;
+//         return true;
+//     }
+
+//     static draw_subscript(row, column) {
+//         scale_cursor(1, .5);
+//         for (var i = 0; i < g_text_buffer[row].text[column].length; i++) {
+//             write_text(g_text_buffer[row].text[column].charAt(i), false);
+//         }
+//         scale_cursor(1, 2);
+//     }
+
+//     static create_math_symbol(symbol, key) {
+//         return valid_math_symbols[symbol].construct(key);
+//     }
+// }
+
+// const valid_math_symbols = {
+//     "\\sqrt" : new math_symbol(math_symbol.create_sqrt, math_symbol.draw_sqrt),
+//     "\\nrt" : new math_symbol(math_symbol.create_nrt, math_symbol.draw_nrt),
+//     "\\frac" : new math_symbol(math_symbol.create_frac, math_symbol.draw_frac),
+//     "\\pi" : new math_symbol(math_symbol.create_pi, math_symbol.draw_pi),
+//     "\\theta" : new math_symbol(math_symbol.create_theta, math_symbol.draw_theta),
+//     "_" :  new math_symbol(math_symbol.create_subscript, math_symbol.draw_subscript)
+// }
+
+function finish_math_symbol() {
+    g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, symbol.create_symbol("\\" + g_tmp_buffer));
+    g_cursor_position.x -= g_tmp_buffer.length-1;
+    g_tmp_buffer = "";
 }
 
 function clamp(val, min, max) {
@@ -1012,8 +779,8 @@ function reload_buffer() {
 
 function calculate_max_letter_size() { 
     for (var i = 'a'; i <= 'z'; i = String.fromCharCode(i.charCodeAt(0) + 1)) {
-        letter_size = g_ctx.measureText(i);
-        height = letter_size.actualBoundingBoxAscent - letter_size.actualBoundingBoxDescent;
+        var letter_size = g_ctx.measureText(i);
+        var height = letter_size.actualBoundingBoxAscent - letter_size.actualBoundingBoxDescent;
         if (height > max_height) {
             max_height = height;
         }
@@ -1026,7 +793,7 @@ function key_pressed_listener(e) {
 
 function mouse_click_listener(e) {
     deselect_text();
-    rect = g_canvas.getBoundingClientRect()
+    var rect = g_canvas.getBoundingClientRect()
     var mouse_x = e.clientX - rect.left + g_letter_spacing/2; // We're offseting by half the letter width so that we round based on the middle of the letter and not the end 
     var mouse_y = e.clientY - rect.top;
 
@@ -1059,41 +826,32 @@ function is_text_key(key) {
     return (key.keyCode >= ONE_KEY_CODE && key.keyCode < Z_CHAR_CODE) || (key.keyCode >= SEMI_COLON_CHAR_CODE && key.keyCode <= QUOTE_CHAR_CODE);
 }
 
-function create_math_symbol(key) {
+function identify_math_symbol(key) {
     if (key.key == "\\") return;
-    if (g_current_symbol !== "") { // After symbol type is chosen
-        if (!math_symbol.create_math_symbol(g_current_symbol, key)) {
-            g_current_symbol = "";
-            g_tmp_buffer = "";
-            g_state = states.text;
-            reload_buffer();
-        }
+    // Read symbol type
+    if (key.key === "Backspace") {
+        g_tmp_buffer = g_tmp_buffer.substring(0, g_tmp_buffer.length-1); // Remove last element
+        reload_buffer();
+        return;
     }
-    else { // Read symbol type
-        if (key.key === "Backspace") {
-            g_tmp_buffer = g_tmp_buffer.substring(0, g_tmp_buffer.length-2); // Remove last element
-            reload_buffer();
-            return;
-        }
 
 
-        g_tmp_buffer = g_tmp_buffer.concat(key.key);
-        if (is_valid_symbol("\\" + g_tmp_buffer)) {
-            finish_math_symbol(g_tmp_buffer);
+    g_tmp_buffer = g_tmp_buffer.concat(key.key);
+    if (symbol.is_valid("\\" + g_tmp_buffer)) {
+        finish_math_symbol(g_tmp_buffer);
+    }
+    else if (key.key === " ") { // If it's not a supported symbol write as plain text
+        for (var i = 0; i < g_tmp_buffer.length; i++) {
+            g_text_buffer[g_cursor_position.y].text.splice(g_cursor_position.x - g_tmp_buffer.length + i, 0, g_tmp_buffer[i]); 
         }
-        else if (key.key === " ") { // If it's not a supported symbol write as plain text
-            for (var i = 0; i < g_tmp_buffer.length; i++) {
-                g_text_buffer[g_cursor_position.y].text.splice(g_cursor_position.x - g_tmp_buffer.length + i, 0, g_tmp_buffer[i]); 
-            }
-            g_tmp_buffer = "";
-        }
-        else {
-            // Draw the keys without storing them.
-            g_cursor_position.x = g_current_symbol_position.x;
-            reload_buffer();
-            for (var i = 0; i < g_tmp_buffer.length; i++) {
-                write_text(g_tmp_buffer.charAt(i), false);
-            }
+        g_tmp_buffer = "";
+    }
+    else {
+        // Draw the keys without storing them.
+        g_cursor_position.x = g_current_symbol_position.x;
+        reload_buffer();
+        for (var i = 0; i < g_tmp_buffer.length; i++) {
+            write_text(g_tmp_buffer.charAt(i), false);
         }
     }
 }
@@ -1172,14 +930,12 @@ function navigate(key) {
     }
 }
 
-function draw_math_symbol(symbol, row, column) {
-    if (is_valid_symbol(symbol)) {
-        valid_math_symbols[symbol].draw(row, column);
+function draw_math_symbol(row, column) {
+    if (g_text_buffer[row].text[column].draw !== undefined) {
+        g_text_buffer[row].text[column].draw();
     }
     else {
-        for (var i = 0; i < symbol.length; i++) {
-            write_text(symbol[i]);
-        }
+        console.error("Cannot draw non-symbol at position ", row, column);
     }
 }
 
@@ -1276,33 +1032,33 @@ function key_pressed(key, append_to_buffer) {
     else if (key.key === "/") {
         g_current_symbol_position.x = g_cursor_position.x;
         g_current_symbol_position.y = g_cursor_position.y;
-        var previous = "";
-        var splice_length = 0;
-        for (var i = g_cursor_position.x-1; i >= 0; i--) {
-            if (g_text_buffer[g_cursor_position.y].text[i] === " " || g_text_buffer[g_cursor_position.y].text[i+1] === "(") {
-                break;
-            }
-            previous += g_text_buffer[g_cursor_position.y].text[i];
-            splice_length++;
-        }
-        if (previous !== "" && previous !== " ") {
-            g_text_buffer[g_cursor_position.y].text.splice(g_cursor_position.x-splice_length, splice_length);
-            g_current_symbol_position.x-=splice_length;
-            g_tmp_buffer = "{" + previous + "}";
-        }
-        g_state = states.create_symbol;
-        g_current_symbol = "frac";
+        // var previous = "";
+        // var splice_length = 0;
+        // for (var i = g_cursor_position.x-1; i >= 0; i--) {
+        //     if (g_text_buffer[g_cursor_position.y].text[i] === " " || g_text_buffer[g_cursor_position.y].text[i+1] === "(") {
+        //         break;
+        //     }
+        //     previous += g_text_buffer[g_cursor_position.y].text[i];
+        //     splice_length++;
+        // }
+        // if (previous !== "" && previous !== " ") {
+        //     g_text_buffer[g_cursor_position.y].text.splice(g_cursor_position.x-splice_length, splice_length);
+        //     g_current_symbol_position.x-=splice_length;
+        //     g_tmp_buffer = "{" + previous + "}";
+        // }
+        // g_state = states.create_symbol;
+        // g_current_symbol = "frac";
     }
     else if (key.key === "_") {
         g_current_symbol_position.x = g_cursor_position.x;
         g_current_symbol_position.y = g_cursor_position.y;
-        g_state = states.create_symbol;
-        g_current_symbol = "_";
+        // g_state = states.create_symbol;
+        // g_current_symbol = "_";
     }
 
 
     if (g_state === states.create_symbol) {
-        create_math_symbol(key);
+        identify_math_symbol(key);
     }
     else if (g_state === states.edit_symbol) {
         edit_math_symbol(key);
@@ -1349,26 +1105,30 @@ function write_text(text, append_to_buffer) {
     return;
 }
 
-function load() {
-    document.querySelector("#editor").width = window.innerWidth;   // Set the width of the canvas to the width of the window
-    document.querySelector("#editor").height = window.innerHeight;  // Same with the height
-    g_canvas = document.getElementById("editor");
-    g_ctx = g_canvas.getContext('2d');
-
-    window.addEventListener('keydown', key_pressed_listener, false);
-    window.addEventListener('mousedown', mouse_click_listener);
-
-    g_ctx.font = font_size + "px " + font_name;
-    g_ctx.fillStyle = text_color;
-    g_ctx.strokeStyle = text_color
-    g_ctx.imageSmoothingEnabled = false;
-    g_ctx.textAlign = "center";
-
-    calculate_max_letter_size();
-
-    g_letter_spacing = g_ctx.measureText('w').width;
-    g_cursor_size.y = max_height;
-    g_cursor_size.x = 2;
-
-    g_cursor_interval = setInterval(draw_cursor, cursor_blink_speed);
+function print_text() {
+    console.log(g_text_buffer);
 }
+
+
+// Runs on load
+document.querySelector("#editor").width = window.innerWidth;   // Set the width of the canvas to the width of the window
+document.querySelector("#editor").height = window.innerHeight;  // Same with the height
+g_canvas = document.getElementById("editor");
+g_ctx = g_canvas.getContext('2d');
+
+window.addEventListener('keydown', key_pressed_listener, false);
+window.addEventListener('mousedown', mouse_click_listener);
+
+g_ctx.font = font_size + "px " + font_name;
+g_ctx.fillStyle = text_color;
+g_ctx.strokeStyle = text_color
+g_ctx.imageSmoothingEnabled = false;
+g_ctx.textAlign = "center";
+
+calculate_max_letter_size();
+
+g_letter_spacing = g_ctx.measureText('w').width;
+g_cursor_size.y = max_height;
+g_cursor_size.x = 2;
+
+g_cursor_interval = setInterval(draw_cursor, cursor_blink_speed);
