@@ -1,4 +1,4 @@
-import * as symbol from "./math_symbols.js";
+import * as symbol from "./math-symbols.js";
 export { g_cursor_position, g_ctx, write_text, g_text_buffer };
 
 const bg_color = "#212529";
@@ -33,7 +33,8 @@ class line {
         this.text = [];
         this.selection = new point(0, 0);
         this.selection.start = -1;   /// FIXME: This is a hack. 
-        this.selection.end = -1;     ///        We really shouldn't be adding imaginary fields to a point object. But x and y don't make sense for this object
+        this.selection.end = -1;     ///        We really shouldn't be adding imaginary fields to a point object. 
+                                     ///        But x and y don't make sense for this object.
     }
 
     /**
@@ -592,8 +593,8 @@ function draw_cursor() {
     g_cursor_visible = !g_cursor_visible;
 }
 
-function select_row(row) {
-    g_text_buffer[row].select_line();
+function draw_highlight(from, to) {
+
 }
 
 function deselect_text() {
