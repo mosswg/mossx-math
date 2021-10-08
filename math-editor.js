@@ -1,7 +1,7 @@
 const bg_color = "#212529";
 const text_color = "#6c757d";
 
-var font_name;
+var font_name = "Iosevka";
 const font_size = 30;
 
 
@@ -965,7 +965,6 @@ function arrow_key_pressed(key) {
                 increment_cursor_position(0, 1);
             }    
     }
-    reload_buffer();
 }
 
 
@@ -1046,9 +1045,6 @@ function load() {
 
     window.addEventListener('keydown', key_pressed_listener, false);
     window.addEventListener('mousedown', mouse_click_listener);
-
-    font_first_space = g_ctx.font.indexOf(' ');
-    font_name = g_ctx.font.substring(font_first_space + 1);
 
     g_ctx.font = font_size + "px " + font_name;
     g_ctx.fillStyle = text_color;
