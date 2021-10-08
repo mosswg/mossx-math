@@ -451,6 +451,57 @@ class math_symbol {
         write_text('θ', false);
     }
 
+    static create_subscript(key) {
+        var position_in_tmp_buffer = g_current_symbol_position.x - g_cursor_position.x;
+
+        if (key.key === "Enter" || key.key === "Tab" || (position_in_tmp_buffer === g_tmp_buffer.length-1 && key.key === "ArrowRight")) { // Check if we should stop creating the sqrt
+            g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, g_current_symbol);
+            g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 0, "");
+            for (var i = 0; i < g_tmp_buffer.length; i++) {
+                g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += g_tmp_buffer[i];
+            }
+            g_text_buffer[g_current_symbol_position.y].text[g_current_symbol_position.x + 1] += '}';
+            return false;
+        }
+        reload_buffer();
+        var cursor_x = g_cursor_position.x + 1;
+        if (g_tmp_buffer === "") {
+            g_tmp_buffer = "{"
+            return true;
+        }      
+        if (key.key == "Backspace") {
+            if (g_tmp_buffer === "{") {
+                g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x + 1, 1);
+                reload_buffer();
+                g_current_symbol = "";
+                g_tmp_buffer = "";
+                g_reading_math_symbol = false;
+            }
+            cursor_x-=2;
+            g_tmp_buffer = g_tmp_buffer.substring(0, position_in_tmp_buffer) + g_tmp_buffer.substring(position_in_tmp_buffer+1, g_tmp_buffer.length);
+        }
+        else {
+            g_tmp_buffer += key.key;
+        }
+
+        scale_cursor(1, .5);
+        g_cursor_position.x = g_current_symbol_position.x;
+        for (var i = 1; i < g_tmp_buffer.length; i++) {
+            write_text(g_tmp_buffer[i], false);
+        }
+        scale_cursor(1, 2);
+        g_cursor_position.x = cursor_x;
+        return true;
+    }
+
+    static draw_subscript(row, column) {
+        scale_cursor(1, .5);
+        for (var i = 0; i < g_text_buffer[row].text[column].length; i++) {
+            write_text(g_text_buffer[row].text[column].charAt(i), false);
+        }
+        scale_cursor(1, 2);
+    }
+
     static create_math_symbol(symbol, key) {
         return valid_math_symbols[symbol].construct(key);
     }
@@ -459,9 +510,10 @@ class math_symbol {
 const valid_math_symbols = {
     "sqrt" : new math_symbol(math_symbol.create_sqrt, math_symbol.draw_sqrt),
     "nrt" : new math_symbol(math_symbol.create_nrt, math_symbol.draw_nrt),
-    "frac": new math_symbol(math_symbol.create_frac, math_symbol.draw_frac),
-    "pi": new math_symbol(math_symbol.create_pi, math_symbol.draw_pi),
-    "theta": new math_symbol(math_symbol.create_theta, math_symbol.draw_theta)
+    "frac" : new math_symbol(math_symbol.create_frac, math_symbol.draw_frac),
+    "pi" : new math_symbol(math_symbol.create_pi, math_symbol.draw_pi),
+    "theta" : new math_symbol(math_symbol.create_theta, math_symbol.draw_theta),
+    "_" :  new math_symbol(math_symbol.create_subscript, math_symbol.draw_subscript)
 }
 
 function finish_math_symbol() {
@@ -999,6 +1051,14 @@ function key_pressed(key, append_to_buffer) {
         g_state = states.create_symbol;
         g_current_symbol = "frac";
     }
+    else if (key.key === "_") {
+        g_current_symbol_position.x = g_cursor_position.x;
+        g_current_symbol_position.y = g_cursor_position.y;
+        g_state = states.create_symbol;
+        g_current_symbol = "_";
+    }
+
+
     if (g_state === states.create_symbol) {
         create_math_symbol(key);
     }
