@@ -601,9 +601,10 @@ function navigate(key) {
             case "Tab":
             case "CapsLock":
                 return;
-                
             case " ":
                 write_text(" ", true);
+                return;
+                
             default: 
                 console.log("Unrecognized Nav Key");
                 console.log(key); 
@@ -974,10 +975,35 @@ class subscript extends symbol {
     }
 }
 
+class power extends symbol {
+    constructor() {
+        super("^");
+        this.args.push([]);
+    }
+
+    displayed_length() {
+        return this.args[0].length;
+    }
+
+    get_cursor_scale() {
+        return new point(1, .5);
+    }
+
+    get_cursor_offset() {
+        return new point(0, -0.5);
+    }
+
+    draw() {        
+        for (var i = 0; i < this.args[0].length; i++) {
+            write_text(this.args[0][i], false);
+        }
+    }
+}
+
 
 class pi extends symbol {
-    constructor(row, column) {
-        super(row, column, "\\pi");
+    constructor() {
+        super("\\pi");
     }
 
     displayed_length() {
