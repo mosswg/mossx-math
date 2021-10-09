@@ -1,6 +1,3 @@
-import * as symbol from "./math-symbols.js";
-export { g_cursor_position, g_ctx, write_text, g_text_buffer, cursor_x_to_pixels, cursor_y_to_pixels };
-
 const bg_color = "#212529";
 const text_color = "#6c757d";
 
@@ -21,7 +18,7 @@ const states = {
     edit_symbol: edit_math_symbol,
 }
 
-export class point {
+class point {
     constructor(x, y) {
         this.x = x;
         this.y = y;
@@ -1079,30 +1076,274 @@ function write_text(text, append_to_buffer) {
     return;
 }
 
-function print_text() {
-    console.log(g_text_buffer);
+
+function load() {
+    document.querySelector("#editor").width = window.innerWidth;   // Set the width of the canvas to the width of the window
+    document.querySelector("#editor").height = window.innerHeight;  // Same with the height
+    g_canvas = document.getElementById("editor");
+    g_ctx = g_canvas.getContext('2d');
+
+    window.addEventListener('keydown', key_pressed_listener, false);
+    window.addEventListener('mousedown', mouse_click_listener);
+
+    g_ctx.font = font_size + "px " + font_name;
+    g_ctx.fillStyle = text_color;
+    g_ctx.strokeStyle = text_color
+    g_ctx.imageSmoothingEnabled = false;
+    g_ctx.textAlign = "center";
+
+    calculate_max_letter_size();
+
+    g_letter_spacing = g_ctx.measureText('w').width;
+    g_cursor_size.y = max_height;
+    g_cursor_size.x = 2;
+
+    g_cursor_interval = setInterval(draw_cursor, cursor_blink_speed);
+}
+
+class symbol {
+    row;
+    column;
+    name;
+    args = [];
+
+    constructor(row, column, name) {
+        if (row === undefined) {
+            this.row = g_cursor_position.y;
+        }
+        else {
+            this.row = row;
+        }
+        if (column === undefined) {
+            this.column = g_cursor_position.x;
+        }
+        else {
+            this.column = column;
+        }
+        this.name = name;
+        //g_text_buffer[this.row].text.splice(this.column, 0, this);
+    }
+
+    displayed_length() { symbol.instance_error();  return 0; }
+
+    insert(element, pos, arg) {
+        this.args[arg].splice(pos, 0, element);
+    }
+
+    delete(pos, arg) {
+        this.args[arg].splice(pos, 1);
+    }
+
+    
+    // TODO: SCALE BEFORE CALLING THIS METHOD
+    draw(row, column) { symbol.instance_error(); }
+
+    get_pos_from_cursor() { 
+        if (g_cursor_position.y !== this.row) {
+            return -1;
+        }
+
+        return g_cursor_position.x - this.column; 
+    }
+
+    get_cursor_scale(pos, arg) { return new point(1, 1); }
+
+    get_cursor_offset(pos, arg) { return new point(0, 0); }
+
+    to_string() { 
+        var out = this.name;
+        for (var i = 0; i < this.args.length; i++) {
+            out += "{";
+            for (var j = 0; j < this.args[i].length; j++) {
+                out += this.args[i][j];
+            }
+            out += "}";
+        }
+        return out;
+    }
+
+    static instance_error() {
+        console.log("ERROR: Instance of base symbol is not supported");
+    }
+
+    static create_symbol(id, row, column) {
+        return new symbol_constructors[id](row, column);
+    }
+    
+    static is_valid(symbol) { 
+        if (symbol.draw !== undefined) {
+            return true;
+        }
+    
+        return symbol_constructors[symbol] !== undefined;
+    }
+    
 }
 
 
-// Runs on load
-document.querySelector("#editor").width = window.innerWidth;   // Set the width of the canvas to the width of the window
-document.querySelector("#editor").height = window.innerHeight;  // Same with the height
-g_canvas = document.getElementById("editor");
-g_ctx = g_canvas.getContext('2d');
 
-window.addEventListener('keydown', key_pressed_listener, false);
-window.addEventListener('mousedown', mouse_click_listener);
+class nrt extends symbol {
+    constructor(row, column) { 
+        super(row, column, "\\nrt");
+        this.args.push([], []);
+    }
 
-g_ctx.font = font_size + "px " + font_name;
-g_ctx.fillStyle = text_color;
-g_ctx.strokeStyle = text_color
-g_ctx.imageSmoothingEnabled = false;
-g_ctx.textAlign = "center";
+    displayed_length() {
+        return this.args[0].length + this.args[1].length + 1;
+    }
 
-calculate_max_letter_size();
+    draw(row, column) {
 
-g_letter_spacing = g_ctx.measureText('w').width;
-g_cursor_size.y = max_height;
-g_cursor_size.x = 2;
+    }
+}
 
-g_cursor_interval = setInterval(draw_cursor, cursor_blink_speed);
+class sqrt extends symbol {
+    constructor(row, column) { 
+        super(row, column, "\\sqrt");
+        this.args.push([]);
+    }
+
+    displayed_length() {
+        return this.args[0].length + 1;
+    }
+
+
+    draw(row, column) { 
+        if (row === undefined) {
+            row = g_cursor_position.x;
+        }
+        if (column === undefined) {
+            column = g_cursor_position.y;
+        }
+
+        write_text('√');            
+        g_ctx.beginPath();
+        g_ctx.moveTo(cursor_x_to_pixels(column) + g_ctx.measureText('√').width/2, cursor_y_to_pixels(row) - g_ctx.measureText('√').actualBoundingBoxAscent); // Draw the covering line
+        g_ctx.lineTo(cursor_x_to_pixels(column + this.args[0].length) + g_ctx.measureText('√').width/2, cursor_y_to_pixels(row) - g_ctx.measureText('√').actualBoundingBoxAscent);
+        g_ctx.closePath();
+        g_ctx.stroke();             
+        for (var i = 0; i < this.args[0].length; i++) {
+            write_text(this.args[0][i], false);
+        }
+    }
+}
+
+
+class frac extends symbol {
+    constructor(row, column) {
+        super(row, column, "\\frac");
+        this.args.push([], []);
+    }
+
+    displayed_length() { return Math.max(this.args[0].length, this.args[1].length); }
+
+
+    draw(row, column) { 
+        if (row === undefined) {
+            row = g_cursor_position.y;
+        }
+        if (column === undefined) {
+            column = g_cursor_position.x;
+        }
+        var tot_length = this.args[0].length + this.args[1].length;
+        var numerator_off = Math.max(0, (tot_length/2) - (this.args[0].length));
+        var denom_off = Math.max(0, (this.args[0].length) - (tot_length/2));
+        g_cursor_position.y-=.5;
+        g_cursor_position.x += numerator_off;
+        g_ctx.beginPath();
+        g_ctx.moveTo(g_cursor_position_x_to_pixels(column-1), g_cursor_position_y_to_pixels(row) - g_ctx.measureText('1').actualBoundingBoxAscent/2); // Draw the covering line
+        g_ctx.lineTo(g_cursor_position_x_to_pixels(column-.5 + this.displayed_length()), g_cursor_position_y_to_pixels(row) - g_ctx.measureText('1').actualBoundingBoxAscent/2);
+        g_ctx.closePath();
+        g_ctx.stroke();
+        for (var i = 0; i < this.args[0].length; i++) {
+            write_text(this.args[0][i], false);
+        }
+        g_cursor_position.y++;
+        if (this.args.displayed_length !== undefined) {
+            g_cursor_position.x -= (this.args[0].displayed_length()) + numerator_off;
+        }
+        else {
+            g_cursor_position.x -= (this.args[0].length) + numerator_off;
+        }
+        g_cursor_position.x += denom_off;
+        for (var i = 0; i < this.args[1].length; i++) {
+            write_text(this.args[1][i], false);
+        }
+        g_cursor_position.x++;
+        g_cursor_position.y-=.5;
+    }
+
+    get_cursor_scale(pos, arg) { 
+        return new point(1, 0.5);    
+    }
+
+    get_cursor_offset(pos, arg) { 
+        if (arg === 0) { 
+            return new point(0, -0.5);
+        }
+        else { 
+            return new point(0, 0.5);
+        }
+    }
+}
+
+class subscript extends symbol {
+    constructor(row, column) {
+        super(row, column, "_");
+        this.args.push([]);
+    }
+
+    displayed_length() {
+        return this.args[0].length;
+    }
+
+    get_cursor_scale() {
+        return new point(1, .5);
+    }
+
+    draw() {        
+        for (var i = 0; i < this.args[0].length; i++) {
+            write_text(this.args[0][i], false);
+        }
+    }
+}
+
+
+class pi extends symbol {
+    constructor(row, column) {
+        super(row, column, "\\pi");
+    }
+
+    displayed_length() {
+        return 1;
+    }
+
+
+    draw() {
+        write_text('π', false);
+    }
+}
+
+class theta extends symbol {
+    constructor(row, column) {
+        super(row, column, "\\theta");
+    }
+
+    displayed_length() {
+        return 1;
+    }
+
+    draw() {
+        write_text('θ', false);
+    }
+}
+
+
+const symbol_constructors = {
+    "\\sqrt" : sqrt, 
+    "\\nrt" : nrt, 
+    "\\frac" : frac,
+    "_" : subscript,
+    "\\pi" : pi, 
+    "\\theta" : theta, 
+}
