@@ -783,24 +783,10 @@ function load() {
 }
 
 class symbol {
-    row;
-    column;
     name;
     args = [];
 
-    constructor(row, column, name) {
-        if (row === undefined) {
-            this.row = g_cursor_position.y;
-        }
-        else {
-            this.row = row;
-        }
-        if (column === undefined) {
-            this.column = g_cursor_position.x;
-        }
-        else {
-            this.column = column;
-        }
+    constructor(name) {
         this.name = name;
         //g_text_buffer[this.row].text.splice(this.column, 0, this);
     }
@@ -816,7 +802,6 @@ class symbol {
     }
 
     
-    // TODO: SCALE BEFORE CALLING THIS METHOD
     draw(row, column) { symbol.instance_error(); }
 
     get_pos_from_cursor() { 
@@ -864,8 +849,8 @@ class symbol {
 
 
 class nrt extends symbol {
-    constructor(row, column) { 
-        super(row, column, "\\nrt");
+    constructor() { 
+        super("\\nrt");
         this.args.push([], []);
     }
 
@@ -879,8 +864,8 @@ class nrt extends symbol {
 }
 
 class sqrt extends symbol {
-    constructor(row, column) { 
-        super(row, column, "\\sqrt");
+    constructor() { 
+        super("\\sqrt");
         this.args.push([]);
     }
 
@@ -911,8 +896,8 @@ class sqrt extends symbol {
 
 
 class frac extends symbol {
-    constructor(row, column) {
-        super(row, column, "\\frac");
+    constructor() {
+        super("\\frac");
         this.args.push([], []);
     }
 
@@ -969,8 +954,8 @@ class frac extends symbol {
 }
 
 class subscript extends symbol {
-    constructor(row, column) {
-        super(row, column, "_");
+    constructor() {
+        super("_");
         this.args.push([]);
     }
 
@@ -1006,8 +991,8 @@ class pi extends symbol {
 }
 
 class theta extends symbol {
-    constructor(row, column) {
-        super(row, column, "\\theta");
+    constructor() {
+        super("\\theta");
     }
 
     displayed_length() {
@@ -1026,5 +1011,5 @@ const symbol_constructors = {
     "\\frac" : frac,
     "_" : subscript,
     "\\pi" : pi, 
-    "\\theta" : theta, 
+    "\\theta" : theta
 }
