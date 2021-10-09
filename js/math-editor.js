@@ -519,7 +519,7 @@ function identify_math_symbol(key) {
             default:
                 g_tmp_buffer = g_tmp_buffer.concat(key.key);
                 if (symbol.is_valid("\\" + g_tmp_buffer)) {
-                    finish_math_symbol(g_tmp_buffer);
+                    finish_math_symbol("\\" + g_tmp_buffer);
                 }
                 else if (key.key === " ") { // If it's not a supported symbol write as plain text
                     for (var i = 0; i < g_tmp_buffer.length; i++) {
@@ -700,7 +700,7 @@ function arrow_key_pressed(key) {
 
 
 function key_pressed(key, append_to_buffer) {
-    if (g_state === states.create_symbol && g_current_symbol === "" && g_text_buffer[g_cursor_position.y].is_symbol(g_cursor_position.x)) {
+    if (g_current_symbol === "" && g_text_buffer[g_cursor_position.y].is_symbol(g_cursor_position.x)) {
         g_state = states.edit_symbol;
         g_current_symbol_position.x = g_cursor_position.x;
         g_current_symbol_position.y = g_cursor_position.y;
@@ -710,7 +710,6 @@ function key_pressed(key, append_to_buffer) {
         g_current_symbol_position.y = g_cursor_position.y;
         g_state = states.create_symbol;
     }
-
 
     if (g_state === states.create_symbol) {
         identify_math_symbol(key);
@@ -732,9 +731,7 @@ function key_pressed(key, append_to_buffer) {
 function write_text(text, append_to_buffer) {
     if (text.draw !== undefined) {
         var scale = text.get_cursor_scale(text.get_pos_from_cursor(), 0);
-        console.log(scale, g_cursor_scale);
         scale_cursor(scale.x, scale.y);
-        console.log(g_cursor_scale);
         text.draw();
         unscale_cursor(scale.x, scale.y);
         return;
@@ -932,11 +929,11 @@ class frac extends symbol {
         var tot_length = this.args[0].length + this.args[1].length;
         var numerator_off = Math.max(0, (tot_length/2) - (this.args[0].length));
         var denom_off = Math.max(0, (this.args[0].length) - (tot_length/2));
-        g_cursor_position.y-=.5;
+        g_cursor_position.y += this.get_cursor_scale(0, 0).y;
         g_cursor_position.x += numerator_off;
         g_ctx.beginPath();
-        g_ctx.moveTo(g_cursor_position_x_to_pixels(column-1), g_cursor_position_y_to_pixels(row) - g_ctx.measureText('1').actualBoundingBoxAscent/2); // Draw the covering line
-        g_ctx.lineTo(g_cursor_position_x_to_pixels(column-.5 + this.displayed_length()), g_cursor_position_y_to_pixels(row) - g_ctx.measureText('1').actualBoundingBoxAscent/2);
+        g_ctx.moveTo(cursor_x_to_pixels(column-1), cursor_y_to_pixels(row) - g_ctx.measureText('1').actualBoundingBoxAscent/2); // Draw the covering line
+        g_ctx.lineTo(cursor_x_to_pixels(column-.5 + this.displayed_length()), cursor_y_to_pixels(row) - g_ctx.measureText('1').actualBoundingBoxAscent/2);
         g_ctx.closePath();
         g_ctx.stroke();
         for (var i = 0; i < this.args[0].length; i++) {
@@ -954,7 +951,7 @@ class frac extends symbol {
             write_text(this.args[1][i], false);
         }
         g_cursor_position.x++;
-        g_cursor_position.y-=.5;
+        g_cursor_position.y -= this.get_cursor_offset(0, 1).y;
     }
 
     get_cursor_scale(pos, arg) { 
