@@ -1,4 +1,4 @@
-import { g_cursor_position as cursor, write_text, g_ctx } from "../math-editor.js"
+import { g_cursor_position as cursor, write_text, g_ctx, point, cursor_x_to_pixels, cursor_y_to_pixels } from "./math-editor.js"
 
 
 export function create_symbol(id, row, column) {
@@ -56,7 +56,7 @@ export class math_symbol {
             return -1;
         }
 
-        return g_cursor_position.x - this.column; 
+        return cursor.x - this.column; 
     }
 
     get_cursor_scale(pos, arg) { return new point(1, 1); }

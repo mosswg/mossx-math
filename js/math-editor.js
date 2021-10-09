@@ -1,5 +1,5 @@
 import * as symbol from "./math-symbols.js";
-export { g_cursor_position, g_ctx, write_text, g_text_buffer };
+export { g_cursor_position, g_ctx, write_text, g_text_buffer, cursor_x_to_pixels, cursor_y_to_pixels };
 
 const bg_color = "#212529";
 const text_color = "#6c757d";
@@ -21,7 +21,7 @@ const states = {
     edit_symbol: edit_math_symbol,
 }
 
-class point {
+export class point {
     constructor(x, y) {
         this.x = x;
         this.y = y;
@@ -52,20 +52,12 @@ class line {
     char_length() {
         var length = 0;
         for (var i = 0; i < this.text.length; i++) {
-            if (this.text[i].startsWith('\\')) {
-                if (this.text[i] === "\\frac") {
-                    length += Math.max(this.text[i+1].length, this.text[i+2].length)-2;
-                    i+=2;
-                    continue;
-                }
-                length++;
+            if (this.text[i].draw !== undefined) {
+                length += this.text[i].displayed_length();
+                i+= this.text[i].args.length;
             }
             else {
                 length += this.text[i].length;
-            }
-
-            if (this.text[i].length !== 1 && this.text[i].startsWith('{')) {
-                length-=2;
             }
         }
         return length;
@@ -536,6 +528,7 @@ function finish_math_symbol() {
     g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, symbol.create_symbol("\\" + g_tmp_buffer));
     g_cursor_position.x -= g_tmp_buffer.length-1;
     g_tmp_buffer = "";
+    reload_buffer();
 }
 
 function clamp(val, min, max) {
@@ -828,32 +821,38 @@ function is_text_key(key) {
 }
 
 function identify_math_symbol(key) {
-    if (key.key == "\\") return;
-    // Read symbol type
-    if (key.key === "Backspace") {
-        g_tmp_buffer = g_tmp_buffer.substring(0, g_tmp_buffer.length-1); // Remove last element
-        reload_buffer();
-        return;
-    }
-
-
-    g_tmp_buffer = g_tmp_buffer.concat(key.key);
-    if (symbol.is_valid("\\" + g_tmp_buffer)) {
-        finish_math_symbol(g_tmp_buffer);
-    }
-    else if (key.key === " ") { // If it's not a supported symbol write as plain text
-        for (var i = 0; i < g_tmp_buffer.length; i++) {
-            g_text_buffer[g_cursor_position.y].text.splice(g_cursor_position.x - g_tmp_buffer.length + i, 0, g_tmp_buffer[i]); 
+    if (key !== undefined) {
+        switch (key.key) {
+            case "/":
+                finish_math_symbol("\\frac");
+                return;
+            case "_":
+                finish_math_symbol("_");
+                return;
+            case "\\":
+                return;
+            case "Backspace":
+                g_tmp_buffer = g_tmp_buffer.substring(0, g_tmp_buffer.length-1); // Remove last element
+                reload_buffer();
+                return;
+            default:
+                g_tmp_buffer = g_tmp_buffer.concat(key.key);
+                if (symbol.is_valid("\\" + g_tmp_buffer)) {
+                    finish_math_symbol(g_tmp_buffer);
+                }
+                else if (key.key === " ") { // If it's not a supported symbol write as plain text
+                    for (var i = 0; i < g_tmp_buffer.length; i++) {
+                        g_text_buffer[g_cursor_position.y].text.splice(g_cursor_position.x - g_tmp_buffer.length + i, 0, g_tmp_buffer[i]); 
+                    }
+                    g_tmp_buffer = "";
+                }
         }
-        g_tmp_buffer = "";
     }
-    else {
-        // Draw the keys without storing them.
-        g_cursor_position.x = g_current_symbol_position.x;
-        reload_buffer();
-        for (var i = 0; i < g_tmp_buffer.length; i++) {
-            write_text(g_tmp_buffer.charAt(i), false);
-        }
+    // Draw the keys without storing them.
+    g_cursor_position.x = g_current_symbol_position.x;
+    reload_buffer();
+    for (var i = 0; i < g_tmp_buffer.length; i++) {
+        write_text(g_tmp_buffer.charAt(i), false);
     }
 }
 
@@ -1025,36 +1024,10 @@ function key_pressed(key, append_to_buffer) {
         g_current_symbol_position.x = g_cursor_position.x;
         g_current_symbol_position.y = g_cursor_position.y;
     }
-    if (key.key === "\\") {
+    if (key.key === "\\" || key.key === "/" || key.key === "_") {
+        g_current_symbol_position.x = g_cursor_position.x;
+        g_current_symbol_position.y = g_cursor_position.y;
         g_state = states.create_symbol;
-        g_current_symbol_position.x = g_cursor_position.x;
-        g_current_symbol_position.y = g_cursor_position.y;
-    }
-    else if (key.key === "/") {
-        g_current_symbol_position.x = g_cursor_position.x;
-        g_current_symbol_position.y = g_cursor_position.y;
-        // var previous = "";
-        // var splice_length = 0;
-        // for (var i = g_cursor_position.x-1; i >= 0; i--) {
-        //     if (g_text_buffer[g_cursor_position.y].text[i] === " " || g_text_buffer[g_cursor_position.y].text[i+1] === "(") {
-        //         break;
-        //     }
-        //     previous += g_text_buffer[g_cursor_position.y].text[i];
-        //     splice_length++;
-        // }
-        // if (previous !== "" && previous !== " ") {
-        //     g_text_buffer[g_cursor_position.y].text.splice(g_cursor_position.x-splice_length, splice_length);
-        //     g_current_symbol_position.x-=splice_length;
-        //     g_tmp_buffer = "{" + previous + "}";
-        // }
-        // g_state = states.create_symbol;
-        // g_current_symbol = "frac";
-    }
-    else if (key.key === "_") {
-        g_current_symbol_position.x = g_cursor_position.x;
-        g_current_symbol_position.y = g_cursor_position.y;
-        // g_state = states.create_symbol;
-        // g_current_symbol = "_";
     }
 
 
