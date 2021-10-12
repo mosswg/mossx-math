@@ -51,7 +51,6 @@ class line {
         for (var i = 0; i < this.text.length; i++) {
             if (this.text[i].draw !== undefined) {
                 length += this.text[i].displayed_length();
-                i+= this.text[i].args.length;
             }
             else {
                 length += this.text[i].length;
@@ -108,6 +107,7 @@ class line {
         return index >= start && index <= end;
     }
 
+
     /**
      * Deleted selected text from the line.
      */
@@ -143,11 +143,30 @@ class line {
      * @returns if the element at the given value is part of a math symbol
      */
     is_symbol(column) {
-        if (column > this.text.length-1) return false;
+        if (column > this.char_length()-1 || column < 0) return false;
         var curr = 0;
         for (var i = 0; i < this.char_length(); curr++) {
             if (column <= line.get_modified_length(this.text[curr]) + i) {
-                return this.text[i].draw !== undefined;
+                return this.text[curr].draw !== undefined;
+            }
+            else {
+                i += line.get_modified_length(this.text[curr]);
+            }
+        }
+    }
+
+    /**
+     * Gets the element at the given index.
+     * 
+     * @param {number} column The column of the value to be checked 
+     * @returns element at the given index
+     */
+    get(index) {
+        if (index > this.char_length()-1) return "";
+        var curr = 0;
+        for (var i = 0; i < this.char_length(); curr++) {
+            if (index <= line.get_modified_length(this.text[curr]) + i) {
+                return this.text[curr];
             }
             else {
                 i += line.get_modified_length(this.text[curr]);
@@ -157,31 +176,20 @@ class line {
     }
 
     get_modified_length(index) {
-        if (symbol.is_valid(this.text[index])) {
-            return 1;
-        }
-        
-        if (text.startsWith("{")) {
-            if (this.text[index-1].startsWith("{")) {
-                return 0;
-            }
-            return this.text[index].length - 2;
+        if (MathSymbol.is_valid(this.text[index])) {
+            return this.text[index].displayed_length();
         }
         
         return this.text[index].length;
     }
 
     /**
-     * @param {String} text The text whose length will be gotten.
+     * @param {*} text The text whose length will be gotten.
      * @returns {Number} the length of the text as it is displayed.
      */
     static get_modified_length(text) {
-        if (symbol.is_valid(text)) {
-            return 1;
-        }
-        
-        if (text.startsWith("{")) {
-            return text.length - 2;
+        if (MathSymbol.is_valid(text)) {
+            return text.displayed_length();
         }
         
         return text.length;
@@ -518,8 +526,10 @@ function identify_math_symbol(key) {
                 return;
             default:
                 g_tmp_buffer = g_tmp_buffer.concat(key.key);
-                if (symbol.is_valid("\\" + g_tmp_buffer)) {
+                if (MathSymbol.is_valid("\\" + g_tmp_buffer)) {
+                    g_cursor_position.x -= g_tmp_buffer.length-1;
                     finish_math_symbol("\\" + g_tmp_buffer);
+                    return;
                 }
                 else if (key.key === " ") { // If it's not a supported symbol write as plain text
                     for (var i = 0; i < g_tmp_buffer.length; i++) {
@@ -549,6 +559,7 @@ function navigate(key) {
         control_key_pressed(key);
     }
     else {
+        var current = g_text_buffer[g_cursor_position.y].get(g_cursor_position.x-1);
         switch (key.key) {
             case "Enter":
                 g_text_buffer.splice(g_cursor_position.y + 1, 0, new line());
@@ -564,6 +575,9 @@ function navigate(key) {
             case "Backspace":
                 if (something_is_selected()) {
                     delete_selected();
+                }                
+                else if (MathSymbol.is_symbol(current)) {
+                    current.delete(0);
                 }
                 else {
                     if (g_cursor_position.x === 0 && g_cursor_position.y === 0) { return; } // Ignore a backspace at the beginning of the screen
@@ -584,7 +598,11 @@ function navigate(key) {
                 if (something_is_selected()) {
                     delete_selected();
                 }
-                else {                
+                else if (g_text_buffer[g_cursor_position.y].is_symbol(g_cursor_position.x)) {
+                    current.move_position(1);
+                    current.delete();
+                }
+                else {            
                     if (g_cursor_position.x === g_text_buffer[g_cursor_position.y].length()) {
                         next_line_length = g_text_buffer[g_cursor_position.y + 1].length();
                         g_text_buffer[g_cursor_position.y].text.push.apply(g_text_buffer[g_cursor_position.y].text, g_text_buffer[g_cursor_position.y + 1].text);
@@ -701,7 +719,7 @@ function arrow_key_pressed(key) {
 
 
 function key_pressed(key, append_to_buffer) {
-    if (g_current_symbol === "" && g_text_buffer[g_cursor_position.y].is_symbol(g_cursor_position.x)) {
+    if (g_text_buffer[g_cursor_position.y].is_symbol(g_cursor_position.x-1)) {
         g_state = states.edit_symbol;
         g_current_symbol_position.x = g_cursor_position.x;
         g_current_symbol_position.y = g_cursor_position.y;
@@ -714,9 +732,6 @@ function key_pressed(key, append_to_buffer) {
 
     if (g_state === states.create_symbol) {
         identify_math_symbol(key);
-    }
-    else if (g_state === states.edit_symbol) {
-        edit_math_symbol(key);
     }
     else if (!is_text_key(key)) {
         navigate(key);
@@ -736,6 +751,13 @@ function write_text(text, append_to_buffer) {
         text.draw();
         unscale_cursor(scale.x, scale.y);
         return;
+    }
+    else if (g_state === states.edit_symbol) {
+        if (append_to_buffer) {
+            console.log(g_cursor_position)
+            g_text_buffer[g_cursor_position.y].get(g_cursor_position.x-1).insert(text);
+            return;
+        }
     }
 
     if (text.length !== 1 && text.startsWith('\\')) {
@@ -813,9 +835,9 @@ class symbol {
         return g_cursor_position.x - this.column; 
     }
 
-    get_cursor_scale(pos, arg) { return new point(1, 1); }
+    get_cursor_scale() { return new point(1, 1); }
 
-    get_cursor_offset(pos, arg) { return new point(0, 0); }
+    get_cursor_offset() { return new point(0, 0); }
 
     to_string() { 
         var out = this.name;
@@ -833,23 +855,27 @@ class symbol {
         console.log("ERROR: Instance of base symbol is not supported");
     }
 
-    static create_symbol(id, row, column) {
-        return new symbol_constructors[id](row, column);
+    static create_symbol(id) {
+        return new symbol_constructors[id]();
     }
     
-    static is_valid(symbol) { 
+    static is_valid(symbol) {
         if (symbol.draw !== undefined) {
             return true;
         }
     
         return symbol_constructors[symbol] !== undefined;
     }
+
+    static is_symbol(symbol) {
+        return symbol.draw !== undefined;
+    }
     
 }
 
 
 
-class nrt extends symbol {
+class nrt extends MathSymbol {
     constructor() { 
         super("\\nrt");
         this.args.push([], []);
@@ -864,7 +890,7 @@ class nrt extends symbol {
     }
 }
 
-class sqrt extends symbol {
+class sqrt extends MathSymbol {
     constructor() { 
         super("\\sqrt");
         this.args.push([]);
@@ -912,49 +938,81 @@ class frac extends symbol {
         if (column === undefined) {
             column = g_cursor_position.x;
         }
-        var tot_length = this.args[0].length + this.args[1].length;
-        var numerator_off = Math.max(0, (tot_length/2) - (this.args[0].length));
-        var denom_off = Math.max(0, (this.args[0].length) - (tot_length/2));
-        g_cursor_position.y += this.get_cursor_scale(0, 0).y;
+        var numerator_length = 0;
+        var denominator_length = 0;
+        for (var i = 0; i < this.args[0].length; i++) {
+            if (MathSymbol.is_symbol(this.args[0][i])) {
+                numerator_length += this.args[0][i].displayed_length();
+            }
+            else {
+                numerator_length += this.args[0][i].length;
+            }
+        }
+        for (var i = 0; i < this.args[1].length; i++) {
+            if (MathSymbol.is_symbol(this.args[1][i])) {
+                denominator_length += this.args[1][i].displayed_length();
+            }
+            else {
+                denominator_length += this.args[1][i].length;
+            }
+        }
+        var tot_length = numerator_length + denominator_length;
+        var numerator_off = Math.max(0, (tot_length/2) - (numerator_length));
+        var denom_off = Math.max(0, (numerator_length) - (tot_length/2));
+        g_cursor_position.y -= this.get_cursor_offset(0, 0).y;
         g_cursor_position.x += numerator_off;
         g_ctx.beginPath();
         g_ctx.moveTo(cursor_x_to_pixels(column-1), cursor_y_to_pixels(row) - g_ctx.measureText('1').actualBoundingBoxAscent/2); // Draw the covering line
-        g_ctx.lineTo(cursor_x_to_pixels(column-.5 + this.displayed_length()), cursor_y_to_pixels(row) - g_ctx.measureText('1').actualBoundingBoxAscent/2);
+        g_ctx.lineTo(cursor_x_to_pixels(column-.5 + Math.max(numerator_length, denominator_length)), cursor_y_to_pixels(row) - g_ctx.measureText('1').actualBoundingBoxAscent/2);
         g_ctx.closePath();
         g_ctx.stroke();
-        for (var i = 0; i < this.args[0].length; i++) {
+        for (var i = 0; i < numerator_length; i++) {
             write_text(this.args[0][i], false);
         }
         g_cursor_position.y++;
-        if (this.args.displayed_length !== undefined) {
-            g_cursor_position.x -= (this.args[0].displayed_length()) + numerator_off;
-        }
-        else {
-            g_cursor_position.x -= (this.args[0].length) + numerator_off;
-        }
+        g_cursor_position.x -= (numerator_length + numerator_off);
         g_cursor_position.x += denom_off;
-        for (var i = 0; i < this.args[1].length; i++) {
+        for (var i = 0; i < denominator_length; i++) {
             write_text(this.args[1][i], false);
         }
         g_cursor_position.x++;
         g_cursor_position.y -= this.get_cursor_offset(0, 1).y;
     }
 
-    get_cursor_scale(pos, arg) { 
+    get_cursor_scale() { 
         return new point(1, 0.5);    
     }
 
-    get_cursor_offset(pos, arg) { 
-        if (arg === 0) { 
+    get_cursor_offset() { 
+        if (this.arg === 0) { 
             return new point(0, -0.5);
         }
         else { 
             return new point(0, 0.5);
         }
     }
+
+    respond_to_vertical_arrow(key) {
+        if (key.key === 'ArrowUp') {
+            if (arg === 0) {
+                g_cursor_position.x -= pos;
+                pos = 0;
+                return false;
+            }
+            arg = 0;
+            return true;
+        }
+        if (arg === 1) { 
+            g_cursor_position.x += (this.displayed_length() - pos);
+            pos = this.displayed_length();
+            return false;
+        }
+        arg = 1;
+        return true;
+    }
 }
 
-class subscript extends symbol {
+class subscript extends MathSymbol {
     constructor() {
         super("_");
         this.args.push([]);
@@ -975,7 +1033,7 @@ class subscript extends symbol {
     }
 }
 
-class power extends symbol {
+class power extends MathSymbol {
     constructor() {
         super("^");
         this.args.push([]);
@@ -1000,29 +1058,34 @@ class power extends symbol {
     }
 }
 
-
-class pi extends symbol {
-    constructor() {
-        super("\\pi");
+class NoArgumentMathSymbol extends MathSymbol {
+    constructor(name) {
+        super(name);
     }
 
     displayed_length() {
         return 1;
     }
 
+    respond_to_horizontal_arrow() { return false; }
+
+    respond_to_vertical_arrow() { return false; }
+}
+
+
+class pi extends NoArgumentMathSymbol {
+    constructor() {
+        super("\\pi");
+    }
 
     draw() {
         write_text('π', false);
     }
 }
 
-class theta extends symbol {
+class theta extends NoArgumentMathSymbol {
     constructor() {
         super("\\theta");
-    }
-
-    displayed_length() {
-        return 1;
     }
 
     draw() {
