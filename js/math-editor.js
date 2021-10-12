@@ -123,7 +123,7 @@ class line {
         var curr = 0;
         for (var i = 0; i < this.char_length(); curr++) {
             if (idx <= line.get_modified_length(this.text[curr]) + i) {
-                if (this.text[curr].length !== 1 && !symbol.is_valid(this.text[curr])) {
+                if (this.text[curr].length !== 1 && !MathSymbol.is_valid(this.text[curr])) {
                     this.text[curr] = this.text[curr].substring(0, idx - curr) + this.text[i].substring(idx - curr + 1);
                 }
                 else {
@@ -213,11 +213,23 @@ var g_canvas;
 var g_ctx;
 
 function finish_math_symbol(id) {
-    g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, symbol.create_symbol(id));
-    g_cursor_position.x -= id.length-1;
+    var symbol = MathSymbol.create_symbol(id);
+    g_text_buffer[g_current_symbol_position.y].text.splice(g_current_symbol_position.x, 0, symbol);
+    g_cursor_position.x += symbol.displayed_length();
     g_state = states.text;
     id = "";
     reload_buffer();
+}
+
+function convert_math_symbol(row, column) {
+    var symbol = MathSymbol.create_symbol(g_text_buffer[row].text[column]);
+    for (var i = 0; i < symbol.args.length; i++) {
+        for (var j = 0; g_text_buffer[row].text[j] !== "}"; j++) {
+            symbol.args[i].push(g_text_buffer[row].text[j]);
+        }
+    }
+    g_text_buffer[row].text.splice(column, symbol.args.length+1);
+    g_text_buffer[row].text.splice(column, 1, symbol);
 }
 
 function clamp(val, min, max) {
@@ -424,6 +436,7 @@ function scale_cursor(x, y) {
  * TODO: Optimize for reloading single lines instead of the entire buffer.
  */
 function reload_buffer() {
+    console.log("reload");
     const pushed_cursor_position_x = g_cursor_position.x;
     const pushed_cursor_position_y = g_cursor_position.y;
     const pushed_cursor_scale_x = g_cursor_scale.x;
@@ -486,13 +499,15 @@ function mouse_click_listener(e) {
 
 function control_key_pressed(key) {
     switch(key.key) {
-        case 'a':
+        case 'a': // Select All
             for (var i = 0; i < g_text_buffer.length; i++) {
                 g_text_buffer[i].select_line();
             }
             reload_buffer();
             break;
-        
+        case '!': // Select Line
+            g_text_buffer[i].select_line();
+            break;
     }
 }
 
@@ -642,6 +657,21 @@ function draw_math_symbol(row, column) {
 function arrow_key_pressed(key) {
     if (!key.shiftKey) {
         deselect_text();
+    }
+    var current = g_text_buffer[g_cursor_position.y].get(g_cursor_position.x-1);
+    if (MathSymbol.is_valid(current)) {
+        switch(key.key) {
+            case "ArrowRight":
+            case "ArrowLeft":
+                current.respond_to_horizontal_arrow(key);
+                return;
+            case "ArrowUp":
+            case "ArrowDown":
+                if (current.vertical_arrow) {
+                    current.respond_to_vertical_arrow(key);
+                    return;
+                }
+        }
     }
     switch (key.key) {
         case "ArrowRight":
@@ -805,27 +835,75 @@ function load() {
     g_cursor_interval = setInterval(draw_cursor, cursor_blink_speed);
 }
 
-class symbol {
+class MathSymbol {
     name;
     args = [];
+    vertical_arrow = false;
+    pos = 0;
+    arg = 0;
 
     constructor(name) {
         this.name = name;
         //g_text_buffer[this.row].text.splice(this.column, 0, this);
     }
 
-    displayed_length() { symbol.instance_error();  return 0; }
+    displayed_length() { MathSymbol.instance_error();  return 0; }
 
-    insert(element, pos, arg) {
-        this.args[arg].splice(pos, 0, element);
+    insert(element) {
+        this.args[this.arg].splice(this.pos, 0, element);
+        this.pos++;
     }
 
-    delete(pos, arg) {
-        this.args[arg].splice(pos, 1);
+    delete() {
+        this.args[this.arg].splice(this.pos, 1);
+        this.pos--;
     }
 
+    change_position(to) {
+        this.pos = to;
+    }
+
+    move_position(offset) {
+        this.pos += offset;
+    }
+
+
+    /**
+     * Changes the position in the symbol based on arrow presses.
+     * 
+     * @param {KeyboardEvent} key 
+     * @returns {boolean} False if the key press moves the cursor out of the symbol otherwise true
+     */
+    respond_to_horizontal_arrow(key) {
+        console.log("hor");
+        console.log(key.key)
+        if (key.key ==='ArrowRight') {
+            increment_cursor_position(1, 0);
+            if (this.pos === this.args[this.arg].length) {
+                return false;
+            }
+            this.pos++;
+            return true;
+        }
+        increment_cursor_position(-1, 0);
+        if (this.pos === 0) { 
+            return false;
+        }
+        this.pos--;
+        return true;
+    }
+
+    /**
+     * Changes the position in the symbol based on arrow presses.
+     * 
+     * @param {KeyboardEvent} key 
+     * @returns {boolean} False if the key press moves the cursor out of the symbol otherwise true
+     */
+    respond_to_vertical_arrow(key) {
+        MathSymbol.instance_error();
+    }
     
-    draw(row, column) { symbol.instance_error(); }
+    draw(row, column) { MathSymbol.instance_error(); }
 
     get_pos_from_cursor() { 
         if (g_cursor_position.y !== this.row) {
@@ -922,13 +1000,28 @@ class sqrt extends MathSymbol {
 }
 
 
-class frac extends symbol {
+class frac extends MathSymbol {
     constructor() {
         super("\\frac");
+        this.vertical_arrow = true;
         this.args.push([], []);
     }
 
-    displayed_length() { return Math.max(this.args[0].length, this.args[1].length); }
+    displayed_length() {
+        if (MathSymbol.is_symbol(this.args[0])) {
+            var numerator_length = this.args[0].displayed_length();
+        }
+        else {
+            var numerator_length = this.args[0].length;
+        }
+        if (MathSymbol.is_symbol(this.args[1])) {
+            var denominator_length = this.args[1].displayed_length();
+        }
+        else {
+            var denominator_length = this.args[1].length;
+        }
+        return Math.max(numerator_length, denominator_length); 
+    }
 
 
     draw(row, column) { 
